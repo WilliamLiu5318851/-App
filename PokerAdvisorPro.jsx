@@ -1,0 +1,923 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { RefreshCw, Trophy, Users, Globe, Brain, Info, DollarSign, ArrowRight, Layers, HandMetal, AlertTriangle, CheckCircle, XCircle, Divide, Flame, Skull, Zap, RotateCcw, Settings, X, Coins, ShieldCheck, MousePointerClick } from 'lucide-react';
+
+/**
+ * 德州扑克助手 Pro (Texas Hold'em Advisor Pro)
+ * Version 3.2 Updates:
+ * 1. Bet Sizing Cap: Suggested bet sizes are now capped at Hero's current stack to prevent impossible numbers.
+ * 2. Click-to-Apply: Clicking on a suggested bet size (Small/Med/Large) automatically updates the Hero's 'Bet' input.
+ * 3. Visual cues added to bet suggestion buttons to indicate interactivity.
+ */
+
+// --- Constants & Data ---
+
+const SUITS = ['s', 'h', 'd', 'c']; 
+const RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A'];
+const RANK_VALUES = { '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, 'T': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14 };
+const STREETS = ['Pre-flop', 'Flop', 'Turn', 'River'];
+
+const TEXTS = {
+  zh: {
+    appTitle: '德州扑克智囊 Pro',
+    heroHand: '我的手牌',
+    communityCards: '公共牌',
+    calculate: '计算胜率 & 获取建议',
+    calculating: '模拟计算中...',
+    reset: '新的一局',
+    settings: '设置',
+    potInfo: '底池追踪',
+    mainPot: '主底池 (前几轮)',
+    currentBets: '本轮死钱',
+    totalPot: '总底池',
+    heroStack: '我的筹码',
+    stackAfterBet: '下注后剩余',
+    spr: 'SPR (筹码底池比)',
+    strategy: '策略风格',
+    conservative: '保守 (Tight)',
+    aggressive: '激进 (Aggressive)',
+    maniac: '诈唬/超激进 (Bluff)',
+    players: '对手动作',
+    active: '入局',
+    folded: '弃牌',
+    bet: '本轮下注',
+    equity: '真实胜率',
+    advice: '行动指南',
+    nextStreet: '收池 & 下一轮',
+    finishHand: '结算本局',
+    betSizing: '推荐加注额 (点击应用)',
+    potOdds: '底池赔率',
+    requiredEquity: '所需胜率',
+    advice_fold: '弃牌 (Fold)',
+    advice_check_fold: '过牌/弃牌 (Check/Fold)',
+    advice_check_call: '过牌/跟注 (Check/Call)',
+    advice_call: '跟注 (Call)',
+    advice_raise: '加注 (Raise)',
+    advice_raise_bluff: '诈唬加注 (Bluff Raise)',
+    advice_allin: '全压 (All-In)',
+    advice_allin_bluff: '全压诈唬 (All-In Bluff)',
+    reason_spr_low: 'SPR过低，您已套池(Committed)',
+    reason_value: '强牌价值下注',
+    reason_bluff_semi: '半诈唬：有听牌，打退对手',
+    reason_bluff_pure: '纯诈唬：扮演强牌，利用弃牌率',
+    reason_odds: '赔率合适，适合跟注听牌',
+    street_pre: '翻牌前',
+    street_flop: '翻牌圈',
+    street_turn: '转牌圈',
+    street_river: '河牌圈',
+    add_player: '添加对手',
+    bet_size_small: '小注 (1/3)',
+    bet_size_med: '中注 (2/3)',
+    bet_size_large: '满池 (1.0)',
+    bet_size_over: '超池 (1.5x)',
+    settle_win: '赢',
+    settle_loss: '输',
+    settle_split: '平',
+    settle_title: '分池结算',
+    settle_confirm: '确认结算结果',
+    restart_hand: '开始下一手牌',
+    btn_allin: 'ALL-IN',
+    rebuy: '补充筹码',
+    deck_count: '牌副数 (Decks)',
+    deck_info: '标准德扑为1副。多副牌会降低阻断效应。',
+    game_settings: '游戏设置',
+    selectCard: '选择一张牌',
+    pot_segment: '池',
+    contestants: '参与人数',
+    net_change: '本局变动',
+    segment_main: '主池 (Main)',
+    segment_side: '边池 (Side)',
+    buy_in_amount: '一手筹码 (Buy-in)',
+    buy_in_info: 'Rebuy 按钮的默认补充金额。'
+  },
+  en: {
+    appTitle: 'Poker Advisor Pro',
+    heroHand: 'Hero Hand',
+    communityCards: 'Board',
+    calculate: 'Calculate & Advise',
+    calculating: 'Simulating...',
+    reset: 'New Hand',
+    settings: 'Settings',
+    potInfo: 'Pot Tracker',
+    mainPot: 'Main Pot',
+    currentBets: 'Current Bets',
+    totalPot: 'Total Pot',
+    heroStack: 'My Stack',
+    stackAfterBet: 'Left',
+    spr: 'SPR',
+    strategy: 'Strategy',
+    conservative: 'Tight',
+    aggressive: 'Aggressive',
+    maniac: 'Bluff / Maniac',
+    players: 'Opponents',
+    active: 'Active',
+    folded: 'Folded',
+    bet: 'Bet This Rd',
+    equity: 'Raw Equity',
+    advice: 'Action Advice',
+    nextStreet: 'Collect & Deal',
+    finishHand: 'Finish Hand',
+    betSizing: 'Bet Sizing (Click to Apply)',
+    potOdds: 'Pot Odds',
+    requiredEquity: 'Req. Equity',
+    advice_fold: 'Fold',
+    advice_check_fold: 'Check/Fold',
+    advice_check_call: 'Check/Call',
+    advice_call: 'Call',
+    advice_raise: 'Raise',
+    advice_raise_bluff: 'Bluff Raise',
+    advice_allin: 'All-In',
+    advice_allin_bluff: 'All-In Bluff',
+    reason_spr_low: 'Low SPR, Pot Committed',
+    reason_value: 'Value Bet',
+    reason_bluff_semi: 'Semi-Bluff: Draw + Fold Equity',
+    reason_bluff_pure: 'Pure Bluff: Rep Strength',
+    reason_odds: 'Good Odds to Call',
+    street_pre: 'Pre-flop',
+    street_flop: 'Flop',
+    street_turn: 'Turn',
+    street_river: 'River',
+    add_player: 'Add Opp',
+    bet_size_small: 'Small (1/3)',
+    bet_size_med: 'Med (2/3)',
+    bet_size_large: 'Pot (1.0)',
+    bet_size_over: 'Overbet (1.5x)',
+    settle_win: 'Win',
+    settle_loss: 'Loss',
+    settle_split: 'Chop',
+    settle_title: 'Pot Settlement',
+    settle_confirm: 'Confirm & Next Hand',
+    restart_hand: 'Next Hand',
+    btn_allin: 'ALL-IN',
+    rebuy: 'Rebuy',
+    deck_count: 'Deck Count',
+    deck_info: 'Standard is 1. More decks dilute card removal.',
+    game_settings: 'Game Settings',
+    selectCard: 'Select Card',
+    pot_segment: 'Pot',
+    contestants: 'Contestants',
+    net_change: 'Net Change',
+    segment_main: 'Main Pot',
+    segment_side: 'Side Pot',
+    buy_in_amount: 'Buy-in Amount',
+    buy_in_info: 'Default amount for Rebuy button.'
+  }
+};
+
+// --- Poker Logic Helpers ---
+const evaluateHand = (cards) => {
+  if (!cards || cards.length < 5) return 0;
+  const sorted = [...cards].sort((a, b) => RANK_VALUES[b.rank] - RANK_VALUES[a.rank]);
+  const ranks = sorted.map(c => RANK_VALUES[c.rank]);
+  const suits = sorted.map(c => c.suit);
+  const counts = {};
+  ranks.forEach(r => counts[r] = (counts[r] || 0) + 1);
+  const countValues = Object.values(counts);
+  
+  const suitCounts = {};
+  suits.forEach(s => suitCounts[s] = (suitCounts[s] || 0) + 1);
+  let flushSuit = Object.keys(suitCounts).find(s => suitCounts[s] >= 5);
+  let isFlush = !!flushSuit;
+  let flushRanks = isFlush ? sorted.filter(c => c.suit === flushSuit).map(c => RANK_VALUES[c.rank]) : [];
+
+  const uniqueRanks = Array.from(new Set(ranks)).sort((a, b) => b - a);
+  let straightHigh = 0;
+  for (let i = 0; i <= uniqueRanks.length - 5; i++) {
+    const slice = uniqueRanks.slice(i, i + 5);
+    if (slice[0] - slice[4] === 4) { straightHigh = slice[0]; break; }
+  }
+  if (!straightHigh && uniqueRanks.includes(14) && uniqueRanks.includes(2) && uniqueRanks.includes(3) && uniqueRanks.includes(4) && uniqueRanks.includes(5)) straightHigh = 5;
+
+  let isStraightFlush = false; 
+  if (isFlush && straightHigh) {
+     isStraightFlush = true; 
+  }
+
+  if (isStraightFlush) return 8000000 + straightHigh;
+  if (countValues.includes(4)) return 7000000;
+  if (countValues.includes(3) && countValues.includes(2)) return 6000000;
+  if (isFlush) return 5000000 + flushRanks[0];
+  if (straightHigh) return 4000000 + straightHigh;
+  if (countValues.includes(3)) return 3000000;
+  if (countValues.filter(c => c === 2).length >= 2) return 2000000;
+  if (countValues.includes(2)) return 1000000;
+  return ranks[0];
+};
+
+const CardIcon = ({ rank, suit, className = "" }) => {
+  const isRed = suit === 'h' || suit === 'd';
+  const suitSymbol = { s: '♠', h: '♥', d: '♦', c: '♣' }[suit];
+  return (
+    <div className={`bg-white border border-gray-300 rounded-md flex flex-col items-center justify-center select-none shadow-sm ${isRed ? 'text-red-600' : 'text-slate-900'} ${className}`}>
+      <span className="font-bold text-sm leading-none">{rank}</span>
+      <span className="text-base leading-none">{suitSymbol}</span>
+    </div>
+  );
+};
+
+// --- Main Component ---
+
+export default function TexasHoldemAdvisor() {
+  const [lang, setLang] = useState('zh');
+  const [strategy, setStrategy] = useState('conservative'); 
+  const [showSettings, setShowSettings] = useState(false);
+  const [deckCount, setDeckCount] = useState(1);
+  const [buyInAmount, setBuyInAmount] = useState(1000);
+  
+  // Game State
+  const [street, setStreet] = useState(0); 
+  const [heroHand, setHeroHand] = useState([null, null]);
+  const [communityCards, setCommunityCards] = useState([null, null, null, null, null]);
+  
+  // Bankroll State
+  const [heroStack, setHeroStack] = useState(1000); 
+  const [heroBet, setHeroBet] = useState(0);
+  const [heroTotalContributed, setHeroTotalContributed] = useState(0); 
+  
+  // Pot State
+  const [mainPot, setMainPot] = useState(0); 
+  
+  const [players, setPlayers] = useState([
+    { id: 1, bet: 0, totalContributed: 0, active: true },
+    { id: 2, bet: 0, totalContributed: 0, active: true },
+    { id: 3, bet: 0, totalContributed: 0, active: true }
+  ]);
+  
+  const [result, setResult] = useState(null);
+  const [isCalculating, setIsCalculating] = useState(false);
+  const [selectingFor, setSelectingFor] = useState(null);
+  
+  // Settlement State
+  const [settlementMode, setSettlementMode] = useState(false);
+  const [potSegments, setPotSegments] = useState([]);
+
+  const t = TEXTS[lang];
+
+  // Derived Values
+  const currentOpponentBets = players.reduce((sum, p) => sum + p.bet, 0); 
+  const totalPot = mainPot + currentOpponentBets + heroBet;
+  
+  const maxBet = Math.max(heroBet, ...players.map(p => p.bet));
+  const callAmount = maxBet - heroBet;
+  const currentStack = heroStack - heroBet; 
+  
+  const spr = currentStack > 0 && totalPot > 0 ? (currentStack / totalPot).toFixed(2) : '∞';
+
+  // --- Actions ---
+
+  const handleHeroBetChange = (val) => {
+    let newBet = Number(val);
+    if (newBet < 0) newBet = 0;
+    if (newBet > heroStack) newBet = heroStack;
+    setHeroBet(newBet);
+  };
+
+  const handleStackChange = (val) => {
+    let newStack = Number(val);
+    if (newStack < 0) newStack = 0;
+    setHeroStack(newStack);
+  };
+
+  const cycleStrategy = () => {
+    if (strategy === 'conservative') setStrategy('aggressive');
+    else if (strategy === 'aggressive') setStrategy('maniac');
+    else setStrategy('conservative');
+  };
+
+  const getStrategyStyle = () => {
+    switch(strategy) {
+      case 'maniac': return 'bg-purple-900/50 text-purple-400 border-purple-800 shadow-[0_0_15px_rgba(168,85,247,0.3)]';
+      case 'aggressive': return 'bg-red-900/50 text-red-400 border-red-800';
+      default: return 'bg-blue-900/50 text-blue-400 border-blue-800';
+    }
+  };
+
+  const getStrategyLabel = () => {
+    switch(strategy) {
+      case 'maniac': return t.maniac;
+      case 'aggressive': return t.aggressive;
+      default: return t.conservative;
+    }
+  };
+
+  const nextStreet = () => {
+    setMainPot(totalPot); 
+    setHeroTotalContributed(prev => prev + heroBet);
+    setPlayers(players.map(p => ({
+      ...p,
+      totalContributed: (p.totalContributed || 0) + p.bet,
+      bet: 0 
+    })));
+
+    setHeroStack(prev => Math.max(0, prev - heroBet));
+    setHeroBet(0);
+    
+    if (street < 3) {
+      setStreet(street + 1);
+      setResult(null);
+    } else {
+      enterSettlement();
+    }
+  };
+
+  // --- Logic: Pot Segmentation ---
+  const enterSettlement = () => {
+    const heroTotal = heroTotalContributed + heroBet;
+    const opps = players.map(p => ({ ...p, finalTotal: (p.totalContributed || 0) + p.bet }));
+    
+    const activeCaps = [...opps.filter(p => p.active).map(p => p.finalTotal), heroTotal].filter(v => v > 0);
+    const uniqueCaps = [...new Set(activeCaps)].sort((a, b) => a - b);
+
+    const segments = [];
+    let prevCap = 0;
+
+    uniqueCaps.forEach((cap) => {
+      const amount = cap - prevCap;
+      if (amount <= 0) return;
+
+      let potSize = 0;
+      let contributors = 0;
+      let heroInvolved = false;
+
+      if (heroTotal > prevCap) {
+        potSize += Math.min(amount, heroTotal - prevCap);
+        heroInvolved = true;
+        contributors++;
+      }
+
+      opps.forEach(p => {
+        if (p.finalTotal > prevCap) {
+          potSize += Math.min(amount, p.finalTotal - prevCap);
+          if (p.active) contributors++; 
+        }
+      });
+
+      if (potSize > 0 && heroInvolved) {
+        segments.push({
+          id: cap,
+          amount: potSize,
+          contestants: contributors,
+          result: 'loss' // default
+        });
+      }
+      prevCap = cap;
+    });
+
+    setPotSegments(segments);
+    setSettlementMode(true);
+  };
+
+  const updateSegmentResult = (idx, res) => {
+    const newSegments = [...potSegments];
+    newSegments[idx].result = res;
+    setPotSegments(newSegments);
+  };
+
+  const confirmSettlement = () => {
+    let winnings = 0;
+    potSegments.forEach(seg => {
+      if (seg.result === 'win') winnings += seg.amount;
+      else if (seg.result === 'split') winnings += Math.floor(seg.amount / seg.contestants); 
+    });
+
+    const finalStack = (heroStack - heroBet) + winnings;
+    setHeroStack(Math.max(0, finalStack));
+
+    // Reset
+    setStreet(0);
+    setMainPot(0);
+    setHeroBet(0);
+    setHeroTotalContributed(0);
+    setPlayers(players.map(p => ({ ...p, bet: 0, totalContributed: 0, active: true })));
+    setHeroHand([null, null]);
+    setCommunityCards([null, null, null, null, null]);
+    setResult(null);
+    setSettlementMode(false);
+  };
+
+  const calculateEquity = () => {
+    if (heroHand.some(c => c === null)) return;
+    setIsCalculating(true);
+    setResult(null);
+
+    setTimeout(() => {
+      const SIMULATIONS = 1500;
+      let wins = 0;
+      let ties = 0;
+      const activeOpponents = players.filter(p => p.active).length;
+      
+      let fullDeck = [];
+      for (let d = 0; d < deckCount; d++) {
+        for (let s of SUITS) for (let r of RANKS) fullDeck.push({ rank: r, suit: s });
+      }
+
+      const knownCards = [...heroHand, ...communityCards].filter(Boolean);
+      
+      for (let i = 0; i < SIMULATIONS; i++) {
+        let currentDeck = [...fullDeck];
+        knownCards.forEach(kc => {
+          const idx = currentDeck.findIndex(c => c.rank === kc.rank && c.suit === kc.suit);
+          if (idx !== -1) currentDeck.splice(idx, 1);
+        });
+
+        for (let j = currentDeck.length - 1; j > 0; j--) {
+          const k = Math.floor(Math.random() * (j + 1));
+          [currentDeck[j], currentDeck[k]] = [currentDeck[k], currentDeck[j]];
+        }
+        
+        const runout = [...communityCards.filter(Boolean)];
+        while (runout.length < 5) runout.push(currentDeck.pop());
+        
+        const oppHands = [];
+        for (let p = 0; p < activeOpponents; p++) oppHands.push([currentDeck.pop(), currentDeck.pop()]);
+        
+        const heroScore = evaluateHand([...heroHand, ...runout]);
+        let heroWins = true; 
+        let isTie = false;
+        
+        for (let oh of oppHands) {
+          const s = evaluateHand([...oh, ...runout]);
+          if (s > heroScore) { heroWins = false; break; }
+          if (s === heroScore) isTie = true;
+        }
+        if (heroWins && !isTie) wins++;
+        if (heroWins && isTie) ties++;
+      }
+
+      const equity = ((wins + (ties/2)) / SIMULATIONS) * 100;
+      
+      const potOdds = totalPot > 0 ? (callAmount / (totalPot + callAmount)) * 100 : 0;
+      let adviceKey = 'advice_fold';
+      let reasonKey = 'reason_odds';
+      let betSizes = null;
+
+      let buffer = 1.1; 
+      if (strategy === 'aggressive') buffer = 0.9;
+      if (strategy === 'maniac') buffer = 0.6; 
+
+      const requiredEquity = potOdds * buffer;
+      const isManiac = strategy === 'maniac';
+
+      if (parseFloat(spr) < 1.5 && equity > (isManiac ? 15 : 30)) {
+        adviceKey = isManiac ? 'advice_allin_bluff' : 'advice_allin';
+        reasonKey = 'reason_spr_low';
+      } else if (callAmount === 0) {
+        if (equity > 65) {
+          adviceKey = 'advice_raise';
+          reasonKey = 'reason_value';
+        } else if (equity > 45 && strategy !== 'conservative') {
+          adviceKey = 'advice_raise';
+          reasonKey = 'reason_bluff_semi';
+        } else if (isManiac && equity > 20) {
+          adviceKey = 'advice_raise_bluff';
+          reasonKey = 'reason_bluff_pure';
+        } else {
+          adviceKey = 'advice_check_call';
+          reasonKey = 'reason_odds';
+        }
+      } else {
+        if (equity > requiredEquity + 15) {
+           adviceKey = 'advice_raise';
+           reasonKey = 'reason_value';
+        } else if (equity >= requiredEquity) {
+           adviceKey = 'advice_call';
+           reasonKey = 'reason_odds';
+        } else if (isManiac && equity > 15 && equity < requiredEquity) {
+           adviceKey = 'advice_raise_bluff';
+           reasonKey = 'reason_bluff_pure';
+        } else if (strategy === 'aggressive' && equity > requiredEquity * 0.8) {
+           adviceKey = 'advice_call'; 
+           reasonKey = 'reason_bluff_semi';
+        } else {
+           adviceKey = 'advice_fold';
+        }
+      }
+
+      // Bet Sizing Logic with Capping (FIX for User)
+      if (adviceKey.includes('raise') || adviceKey.includes('allin')) {
+        const p = totalPot;
+        // Helper to ensure bet doesn't exceed stack
+        const cap = (val) => Math.min(val, heroStack);
+        
+        betSizes = {
+          small: cap(Math.round(p * 0.33)),
+          med: cap(Math.round(p * 0.66)),
+          large: cap(Math.round(p * (isManiac ? 1.5 : 1.0)))
+        };
+      }
+
+      setResult({
+        equity: equity.toFixed(1),
+        potOdds: potOdds.toFixed(1),
+        requiredEquity: requiredEquity.toFixed(1),
+        advice: t[adviceKey],
+        reason: t[reasonKey],
+        betSizes,
+        isBluff: adviceKey.includes('bluff')
+      });
+      setIsCalculating(false);
+    }, 100);
+  };
+
+  const unavailableCards = useMemo(() => [...heroHand, ...communityCards].filter(Boolean), [heroHand, communityCards]);
+
+  const CardSelector = () => {
+    if (!selectingFor) return null;
+    return (
+      <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => setSelectingFor(null)}>
+        <div className="bg-slate-800 rounded-xl p-4 max-w-lg w-full max-h-[80vh] overflow-y-auto border border-slate-600 shadow-2xl" onClick={e => e.stopPropagation()}>
+          <h3 className="text-white font-bold mb-4">{t.selectCard}</h3>
+          <div className="grid grid-cols-4 gap-2">
+            {SUITS.map(suit => (
+              <div key={suit} className="flex flex-col gap-2">
+                {RANKS.map(rank => {
+                  const takenCount = unavailableCards.filter(c => c.rank === rank && c.suit === suit).length;
+                  const isTaken = takenCount >= deckCount;
+                  
+                  return (
+                    <button
+                      key={`${rank}${suit}`}
+                      disabled={isTaken}
+                      onClick={() => {
+                        const card = { rank, suit };
+                        if (selectingFor.type === 'hero') {
+                          const h = [...heroHand]; h[selectingFor.index] = card; setHeroHand(h);
+                        } else {
+                          const b = [...communityCards]; b[selectingFor.index] = card; setCommunityCards(b);
+                        }
+                        setSelectingFor(null);
+                      }}
+                      className={`p-1 rounded flex justify-center hover:bg-slate-700 ${isTaken ? 'opacity-20 cursor-not-allowed' : ''}`}
+                    >
+                      <CardIcon rank={rank} suit={suit} className="w-10 h-14" />
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Settlement UI Helpers
+  const getPotSplit = () => {
+    const heroTotal = heroTotalContributed + heroBet;
+    const sidePot = players.reduce((sum, p) => {
+      const oppTotal = (p.totalContributed || 0) + p.bet;
+      const excess = Math.max(0, oppTotal - heroTotal);
+      return sum + excess;
+    }, 0);
+    const eligiblePot = Math.max(0, totalPot - sidePot);
+    return { sidePot, eligiblePot };
+  };
+
+  const { sidePot, eligiblePot } = settlementMode ? getPotSplit() : { sidePot: 0, eligiblePot: 0 };
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-10">
+      
+      {/* Navbar */}
+      <div className="bg-slate-900 border-b border-slate-800 p-4 sticky top-0 z-30 shadow-md">
+        <div className="max-w-xl mx-auto flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <Trophy className="text-emerald-500 w-5 h-5" />
+            <span className="font-bold text-lg tracking-tight">{t.appTitle}</span>
+          </div>
+          <div className="flex gap-2 text-xs font-medium items-center">
+            <button onClick={cycleStrategy} 
+              className={`px-3 py-1.5 rounded-full transition border flex items-center gap-1 ${getStrategyStyle()}`}>
+              {strategy === 'maniac' && <Flame className="w-3 h-3 animate-pulse" />}
+              {getStrategyLabel()}
+            </button>
+            <button onClick={() => setShowSettings(true)} className="bg-slate-800 p-2 rounded-full hover:bg-slate-700 border border-slate-700 text-slate-400 hover:text-white transition">
+              <Settings className="w-4 h-4" />
+            </button>
+            <button onClick={() => setLang(l => l === 'zh' ? 'en' : 'zh')} className="bg-slate-800 px-3 py-1.5 rounded-full hover:bg-slate-700 border border-slate-700">
+              {lang === 'zh' ? 'EN' : '中'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-xl mx-auto p-4 space-y-6">
+
+        {/* Pot & Stats Tracker */}
+        <div className="bg-slate-900 rounded-2xl p-4 border border-slate-800 shadow-inner grid grid-cols-2 gap-4">
+          <div>
+            <div className="text-slate-500 text-xs mb-1 uppercase tracking-wider">{t.mainPot}</div>
+            <div className="text-2xl font-mono font-bold text-slate-200">
+              {mainPot} <span className="text-sm text-slate-600">+ {currentOpponentBets + heroBet}</span>
+            </div>
+            <div className="text-emerald-500 text-sm font-bold mt-1">= {totalPot}</div>
+          </div>
+          <div className="text-right">
+            <div className="text-slate-500 text-xs mb-1 uppercase tracking-wider flex items-center justify-end gap-1">
+              {t.spr} <Info className="w-3 h-3"/>
+            </div>
+            <div className={`text-2xl font-mono font-bold ${Number(spr) < 3 ? 'text-red-400' : 'text-blue-400'}`}>
+              {spr}
+            </div>
+            <div className="text-slate-500 text-xs mt-1">{t.stackAfterBet}: {currentStack}</div>
+          </div>
+        </div>
+
+        {/* Board (Streets) */}
+        <div className="space-y-2">
+          <div className="flex justify-between items-center px-1">
+             <span className="text-xs font-bold text-slate-400 uppercase">{t[`street_${['pre','flop','turn','river'][street]}`]}</span>
+             {street < 3 ? (
+               <button onClick={nextStreet} className="text-xs bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1 rounded-full flex items-center gap-1 transition shadow-lg shadow-emerald-900/50">
+                 {t.nextStreet} <ArrowRight className="w-3 h-3" />
+               </button>
+             ) : (
+               !settlementMode && (
+                 <button onClick={enterSettlement} className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1 rounded-full flex items-center gap-1 transition">
+                   {t.finishHand}
+                 </button>
+               )
+             )}
+          </div>
+          
+          <div className="flex gap-2 h-20 sm:h-24">
+             {[0,1,2].map(i => (
+               <div key={i} 
+                    onClick={() => street >= 1 && handleCardClick('board', i)}
+                    className={`flex-1 rounded-lg border-2 flex items-center justify-center cursor-pointer transition relative
+                      ${street >= 1 ? 'bg-slate-800 border-slate-600 hover:border-slate-400' : 'bg-slate-900/50 border-slate-800 opacity-30 cursor-not-allowed'}`}>
+                  {communityCards[i] ? <CardIcon rank={communityCards[i].rank} suit={communityCards[i].suit} className="w-full h-full" /> : <span className="text-slate-700 text-xs">Flop</span>}
+               </div>
+             ))}
+             <div 
+               onClick={() => street >= 2 && handleCardClick('board', 3)}
+               className={`flex-1 rounded-lg border-2 flex items-center justify-center cursor-pointer transition relative
+                 ${street >= 2 ? 'bg-slate-800 border-slate-600 hover:border-slate-400' : 'bg-slate-900/50 border-slate-800 opacity-30 cursor-not-allowed'}`}>
+                {communityCards[3] ? <CardIcon rank={communityCards[3].rank} suit={communityCards[3].suit} className="w-full h-full" /> : <span className="text-slate-700 text-xs">Turn</span>}
+             </div>
+             <div 
+               onClick={() => street >= 3 && handleCardClick('board', 4)}
+               className={`flex-1 rounded-lg border-2 flex items-center justify-center cursor-pointer transition relative
+                 ${street >= 3 ? 'bg-slate-800 border-slate-600 hover:border-slate-400' : 'bg-slate-900/50 border-slate-800 opacity-30 cursor-not-allowed'}`}>
+                {communityCards[4] ? <CardIcon rank={communityCards[4].rank} suit={communityCards[4].suit} className="w-full h-full" /> : <span className="text-slate-700 text-xs">River</span>}
+             </div>
+          </div>
+        </div>
+
+        {/* Hero Section */}
+        <div className="bg-gradient-to-br from-slate-800 to-slate-900 p-4 rounded-xl border border-slate-700 relative overflow-hidden">
+           <div className="absolute top-0 right-0 p-2 opacity-10"><HandMetal className="w-24 h-24" /></div>
+           <div className="flex gap-4 relative z-10">
+              <div className="flex gap-2">
+                {[0,1].map(i => (
+                  <div key={i} onClick={() => setSelectingFor({ type: 'hero', index: i })} className="w-14 h-20 sm:w-16 sm:h-24 bg-slate-700 rounded-lg border-2 border-slate-500 hover:border-yellow-500 cursor-pointer flex items-center justify-center shadow-lg transition">
+                    {heroHand[i] ? <CardIcon rank={heroHand[i].rank} suit={heroHand[i].suit} className="w-full h-full" /> : <span className="text-2xl text-slate-500">+</span>}
+                  </div>
+                ))}
+              </div>
+              <div className="flex-1 flex flex-col justify-center space-y-3">
+                 <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="text-xs text-slate-400">{t.heroStack} (Start of St.)</label>
+                      {heroStack === 0 && (
+                        <button 
+                          onClick={() => setHeroStack(buyInAmount)}
+                          className="flex items-center gap-1 text-[10px] bg-emerald-600 hover:bg-emerald-500 text-white px-2 py-0.5 rounded shadow animate-pulse"
+                        >
+                          <RotateCcw className="w-3 h-3" /> {t.rebuy} {buyInAmount}
+                        </button>
+                      )}
+                    </div>
+                    <input 
+                      type="number" 
+                      value={heroStack} 
+                      onChange={e => handleStackChange(e.target.value)} 
+                      className={`w-full bg-slate-950 border rounded px-2 py-1 font-mono transition focus:outline-none 
+                        ${heroStack === 0 ? 'border-red-500 text-red-400' : 'border-slate-700 text-yellow-400'}`} 
+                    />
+                 </div>
+                 <div>
+                    <div className="flex justify-between items-end mb-1">
+                      <label className="text-xs text-slate-400">{t.bet}</label>
+                      <button 
+                        onClick={() => handleHeroBetChange(heroStack)} 
+                        disabled={heroStack === 0}
+                        className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded shadow-sm transition font-bold tracking-wider 
+                          ${heroStack === 0 ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-red-600 hover:bg-red-500 text-white'}`}
+                      >
+                         <Zap className="w-3 h-3 fill-current" /> {t.btn_allin}
+                      </button>
+                    </div>
+                    <input 
+                      type="number" 
+                      value={heroBet} 
+                      onChange={(e) => handleHeroBetChange(e.target.value)} 
+                      disabled={heroStack === 0}
+                      className={`w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 font-mono transition focus:outline-none 
+                         ${heroStack === 0 ? 'opacity-50 cursor-not-allowed text-slate-500' : 'text-white focus:border-red-500'}`}
+                    />
+                 </div>
+              </div>
+           </div>
+        </div>
+
+        {/* Opponents */}
+        <div className="space-y-3">
+          <div className="flex justify-between items-center">
+            <h3 className="text-sm font-bold text-slate-400 flex items-center gap-2"><Users className="w-4 h-4"/> {t.players}</h3>
+            <button onClick={() => setPlayers([...players, {id: Date.now(), bet: 0, totalContributed: 0, active: true}])} className="text-xs bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded border border-slate-700">+ {t.add_player}</button>
+          </div>
+          <div className="grid grid-cols-1 gap-2">
+             {players.map((p, idx) => (
+               <div key={p.id} className={`flex items-center gap-3 bg-slate-800 p-2 rounded-lg border ${p.active ? 'border-slate-700' : 'opacity-50 border-transparent'}`}>
+                  <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-400">{idx+1}</div>
+                  <div className="flex-1 grid grid-cols-2 gap-2">
+                     <button onClick={() => { const n = [...players]; n[idx].active = !n[idx].active; setPlayers(n); }} 
+                       className={`text-xs rounded py-1 ${p.active ? 'bg-emerald-900/30 text-emerald-400' : 'bg-slate-700 text-slate-500'}`}>
+                       {p.active ? t.active : t.folded}
+                     </button>
+                     <div className="flex items-center gap-2 bg-slate-900 rounded px-2">
+                        <span className="text-slate-500 text-xs">$</span>
+                        <input type="number" value={p.bet} onChange={e => { const n = [...players]; n[idx].bet = Number(e.target.value); setPlayers(n); }} className="w-full bg-transparent text-white text-sm py-1 font-mono focus:outline-none" placeholder="0" />
+                     </div>
+                  </div>
+                  <button onClick={() => setPlayers(players.filter(x => x.id !== p.id))} className="text-slate-600 hover:text-red-400 px-2">×</button>
+               </div>
+             ))}
+          </div>
+        </div>
+
+        {/* Settlement or Calculate */}
+        {settlementMode ? (
+          <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden animate-in fade-in zoom-in-95 duration-300">
+            <div className="p-4 bg-indigo-900/20 border-b border-indigo-900/50">
+              <h2 className="text-xl font-bold text-center text-indigo-200">{t.settle_title}</h2>
+              <div className="text-center text-3xl font-bold mt-2 text-white"><span className="text-sm text-slate-400">$</span> {totalPot}</div>
+            </div>
+            
+            <div className="p-4 space-y-3">
+              {potSegments.map((seg, idx) => (
+                <div key={idx} className="bg-slate-800 rounded-lg p-3 border border-slate-700">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm text-slate-300 font-bold flex items-center gap-2">
+                      {idx === 0 ? <ShieldCheck className="w-4 h-4 text-emerald-400"/> : <Layers className="w-4 h-4 text-blue-400"/>}
+                      {idx === 0 ? t.segment_main : `${t.segment_side} #${idx}`}
+                    </span>
+                    <span className="font-mono text-lg text-white">${seg.amount}</span>
+                  </div>
+                  <div className="flex gap-2">
+                     <button 
+                        onClick={() => updateSegmentResult(idx, 'win')}
+                        className={`flex-1 py-1 rounded text-xs font-bold transition border ${seg.result === 'win' ? 'bg-emerald-600 border-emerald-500 text-white' : 'bg-slate-700 border-slate-600 text-slate-400 hover:bg-slate-600'}`}>
+                        {t.settle_win}
+                     </button>
+                     <button 
+                        onClick={() => updateSegmentResult(idx, 'split')}
+                        className={`flex-1 py-1 rounded text-xs font-bold transition border ${seg.result === 'split' ? 'bg-blue-600 border-blue-500 text-white' : 'bg-slate-700 border-slate-600 text-slate-400 hover:bg-slate-600'}`}>
+                        {t.settle_split}
+                     </button>
+                     <button 
+                        onClick={() => updateSegmentResult(idx, 'loss')}
+                        className={`flex-1 py-1 rounded text-xs font-bold transition border ${seg.result === 'loss' ? 'bg-red-900/50 border-red-800 text-red-200' : 'bg-slate-700 border-slate-600 text-slate-400 hover:bg-slate-600'}`}>
+                        {t.settle_loss}
+                     </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <button 
+              onClick={confirmSettlement}
+              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 text-center transition border-t border-emerald-500">
+              {t.settle_confirm}
+            </button>
+          </div>
+        ) : (
+          <button 
+            onClick={calculateEquity}
+            disabled={isCalculating}
+            className={`w-full font-bold py-4 rounded-xl shadow-lg active:scale-95 transition flex items-center justify-center gap-2
+              ${strategy === 'maniac' 
+                ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-purple-900/30' 
+                : 'bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white shadow-blue-900/20'}`}>
+            {isCalculating ? <RefreshCw className="animate-spin w-5 h-5"/> : (strategy === 'maniac' ? <Skull className="w-5 h-5" /> : <Brain className="w-5 h-5"/>)}
+            {isCalculating ? t.calculating : t.calculate}
+          </button>
+        )}
+
+        {/* Result Display */}
+        {result && !settlementMode && (
+          <div className={`border rounded-xl overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500 ${result.isBluff ? 'bg-purple-900/20 border-purple-500/50' : 'bg-slate-900 border-slate-700'}`}>
+             <div className="p-4 bg-slate-800/50 border-b border-slate-800 flex justify-between items-center">
+                <div>
+                   <h2 className={`text-2xl font-bold ${
+                     result.isBluff ? 'text-purple-400 animate-pulse' :
+                     result.advice.includes('Fold') ? 'text-red-400' : 'text-emerald-400'
+                   }`}>{result.advice}</h2>
+                   <p className="text-xs text-slate-400 mt-1">{result.reason}</p>
+                </div>
+                <div className="text-right">
+                   <div className="text-3xl font-bold text-white">{result.equity}%</div>
+                   <div className="text-xs text-slate-500">{t.equity}</div>
+                </div>
+             </div>
+             
+             {result.betSizes && (
+               <div>
+                 <div className="px-4 pt-2 pb-1 text-xs text-slate-400 flex items-center gap-1">
+                   <MousePointerClick className="w-3 h-3" /> {t.betSizing}
+                 </div>
+                 <div className="p-4 grid grid-cols-3 gap-3 bg-slate-800/30">
+                    <button 
+                      onClick={() => setHeroBet(result.betSizes.small)}
+                      className="flex flex-col items-center p-2 rounded hover:bg-slate-700/50 active:bg-slate-700 transition border border-transparent hover:border-slate-600"
+                    >
+                      <div className="text-xs text-slate-500 mb-1">{t.bet_size_small}</div>
+                      <div className={`font-mono font-bold ${result.betSizes.small === heroStack ? 'text-red-400' : 'text-blue-300'}`}>
+                        {result.betSizes.small}
+                        {result.betSizes.small === heroStack && <span className="text-[10px] block"> (All-In)</span>}
+                      </div>
+                    </button>
+                    
+                    <button 
+                      onClick={() => setHeroBet(result.betSizes.med)}
+                      className="flex flex-col items-center p-2 rounded hover:bg-slate-700/50 active:bg-slate-700 transition border border-transparent hover:border-slate-600 border-x border-slate-700/50"
+                    >
+                      <div className="text-xs text-slate-500 mb-1">{t.bet_size_med}</div>
+                      <div className={`font-mono font-bold ${result.betSizes.med === heroStack ? 'text-red-400' : 'text-blue-300'}`}>
+                        {result.betSizes.med}
+                        {result.betSizes.med === heroStack && <span className="text-[10px] block"> (All-In)</span>}
+                      </div>
+                    </button>
+                    
+                    <button 
+                      onClick={() => setHeroBet(result.betSizes.large)}
+                      className="flex flex-col items-center p-2 rounded hover:bg-slate-700/50 active:bg-slate-700 transition border border-transparent hover:border-slate-600"
+                    >
+                      <div className="text-xs text-slate-500 mb-1">{strategy === 'maniac' ? t.bet_size_over : t.bet_size_large}</div>
+                      <div className={`font-mono font-bold ${strategy === 'maniac' ? 'text-purple-300' : 'text-blue-300'} ${result.betSizes.large === heroStack ? 'text-red-400' : ''}`}>
+                        {result.betSizes.large}
+                        {result.betSizes.large === heroStack && <span className="text-[10px] block"> (All-In)</span>}
+                      </div>
+                    </button>
+                 </div>
+               </div>
+             )}
+          </div>
+        )}
+
+      </div>
+      
+      <CardSelector />
+
+      {/* Settings Modal */}
+      {showSettings && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => setShowSettings(false)}>
+           <div className="bg-slate-800 rounded-xl p-6 max-w-sm w-full border border-slate-600 shadow-2xl space-y-4" onClick={e => e.stopPropagation()}>
+              <div className="flex justify-between items-center border-b border-slate-700 pb-2">
+                 <h3 className="font-bold text-lg text-white flex items-center gap-2"><Settings className="w-5 h-5" /> {t.game_settings}</h3>
+                 <button onClick={() => setShowSettings(false)} className="text-slate-400 hover:text-white"><X className="w-5 h-5"/></button>
+              </div>
+              <div>
+                 <label className="block text-sm text-slate-400 mb-2">{t.deck_count}: <span className="text-white font-mono font-bold text-lg">{deckCount}</span></label>
+                 <input 
+                   type="range" 
+                   min="1" max="8" step="1" 
+                   value={deckCount} 
+                   onChange={(e) => setDeckCount(Number(e.target.value))}
+                   className="w-full accent-blue-500"
+                 />
+                 <div className="flex justify-between text-xs text-slate-500 mt-1 font-mono">
+                   <span>1</span><span>8</span>
+                 </div>
+                 <p className="text-xs text-slate-500 mt-2 bg-slate-900/50 p-2 rounded border border-slate-700/50 flex gap-2">
+                   <Info className="w-4 h-4 shrink-0 mt-0.5" /> {t.deck_info}
+                 </p>
+              </div>
+              
+              {/* Buy-in Amount Setting */}
+              <div>
+                 <label className="block text-sm text-slate-400 mb-2">{t.buy_in_amount}:</label>
+                 <div className="flex items-center bg-slate-900 rounded border border-slate-700">
+                    <span className="px-3 text-slate-500">$</span>
+                    <input 
+                      type="number" 
+                      value={buyInAmount} 
+                      onChange={(e) => setBuyInAmount(Number(e.target.value))}
+                      className="w-full bg-transparent py-2 text-white font-mono focus:outline-none"
+                    />
+                 </div>
+                 <p className="text-xs text-slate-500 mt-2 bg-slate-900/50 p-2 rounded border border-slate-700/50 flex gap-2">
+                   <Info className="w-4 h-4 shrink-0 mt-0.5" /> {t.buy_in_info}
+                 </p>
+              </div>
+           </div>
+        </div>
+      )}
+
+    </div>
+  );
+  
+  function handleCardClick(type, index) {
+    setSelectingFor({ type, index });
+  }
+}
