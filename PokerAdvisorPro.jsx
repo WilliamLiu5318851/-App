@@ -1,13 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { RefreshCw, Trophy, Users, Globe, Brain, Info, DollarSign, ArrowRight, Layers, HandMetal, AlertTriangle, CheckCircle, XCircle, Divide, Flame, Skull, Zap, RotateCcw, Settings, X, Coins, ShieldCheck, MousePointerClick } from 'lucide-react';
+import { RefreshCw, Trophy, Users, Globe, Brain, Info, DollarSign, ArrowRight, Layers, HandMetal, AlertTriangle, CheckCircle, XCircle, Divide, Flame, Skull, Zap, RotateCcw, Settings, X, Coins, ShieldCheck, MousePointerClick, Flag } from 'lucide-react';
 
 /**
  * 德州扑克助手 Pro (Texas Hold'em Advisor Pro)
- * Version 3.3 Updates:
- * 1. UX Improvement: Fixed the "sticky zero" issue in input fields. 
- * Inputs now display an empty string (showing placeholder '0') when value is 0, 
- * preventing leading zeros (e.g., "050") and making deletion easier.
- * 2. Applied this fix to: Opponent Bets, Hero Bet, Hero Stack, and Buy-in Settings.
+ * Version 3.4 Updates:
+ * 1. Added "Fold" button to Hero section.
+ * 2. Fold logic: Deducts current 'heroBet' from stack and immediately resets the game for the next hand.
+ * 3. Streamlined the flow for "Bet -> Face Raise -> Fold -> Next Hand".
  */
 
 // --- Constants & Data ---
@@ -77,6 +76,7 @@ const TEXTS = {
     settle_confirm: '确认结算结果',
     restart_hand: '开始下一手牌',
     btn_allin: 'ALL-IN',
+    btn_fold: '弃牌 (Fold)',
     rebuy: '补充筹码',
     deck_count: '牌副数 (Decks)',
     deck_info: '标准德扑为1副。多副牌会降低阻断效应。',
@@ -149,6 +149,7 @@ const TEXTS = {
     settle_confirm: 'Confirm & Next Hand',
     restart_hand: 'Next Hand',
     btn_allin: 'ALL-IN',
+    btn_fold: 'Fold',
     rebuy: 'Rebuy',
     deck_count: 'Deck Count',
     deck_info: 'Standard is 1. More decks dilute card removal.',
@@ -298,6 +299,24 @@ export default function TexasHoldemAdvisor() {
   const handleOpponentBetChange = (id, val) => {
     let newBet = val === '' ? 0 : Number(val);
     setPlayers(players.map(p => p.id === id ? { ...p, bet: newBet } : p));
+  };
+
+  const handleFold = () => {
+    // 1. Calculate remaining stack (Start Stack - Current Bet)
+    const remainingStack = heroStack - heroBet;
+    setHeroStack(Math.max(0, remainingStack));
+    
+    // 2. Reset game state for next hand
+    setStreet(0);
+    setMainPot(0);
+    setHeroBet(0);
+    setHeroTotalContributed(0);
+    setPlayers(players.map(p => ({ ...p, bet: 0, totalContributed: 0, active: true })));
+    setHeroHand([null, null]);
+    setCommunityCards([null, null, null, null, null]);
+    setResult(null);
+    setSettlementMode(false);
+    setPotSegments([]);
   };
 
   const cycleStrategy = () => {
@@ -722,14 +741,22 @@ export default function TexasHoldemAdvisor() {
                  <div>
                     <div className="flex justify-between items-end mb-1">
                       <label className="text-xs text-slate-400">{t.bet}</label>
-                      <button 
-                        onClick={() => handleHeroBetChange(heroStack)} 
-                        disabled={heroStack === 0}
-                        className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded shadow-sm transition font-bold tracking-wider 
-                          ${heroStack === 0 ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-red-600 hover:bg-red-500 text-white'}`}
-                      >
-                         <Zap className="w-3 h-3 fill-current" /> {t.btn_allin}
-                      </button>
+                      <div className="flex gap-1">
+                        <button 
+                          onClick={handleFold} 
+                          className="flex items-center gap-1 text-[10px] bg-slate-700 hover:bg-slate-600 text-slate-300 px-2 py-0.5 rounded shadow-sm transition font-bold tracking-wider border border-slate-600"
+                        >
+                           <Flag className="w-3 h-3" /> {t.btn_fold}
+                        </button>
+                        <button 
+                          onClick={() => handleHeroBetChange(heroStack)} 
+                          disabled={heroStack === 0}
+                          className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded shadow-sm transition font-bold tracking-wider 
+                            ${heroStack === 0 ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-red-600 hover:bg-red-500 text-white'}`}
+                        >
+                           <Zap className="w-3 h-3 fill-current" /> {t.btn_allin}
+                        </button>
+                      </div>
                     </div>
                     <input 
                       type="number" 
