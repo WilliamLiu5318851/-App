@@ -1,20 +1,16 @@
-// ⚠️ 核心修复：不再使用 import 导入 React，而是使用 index.html 中加载的全局变量
-// 这样可以解决 "createRoot is not defined" 的问题
-
-// 1. 图标库仍然使用 import (因为 index.html 的 importmap 中定义了它)
+// 1. 图标库 (从 index.html 的 importmap 加载)
 import { RefreshCw, Trophy, Users, Globe, Brain, Info, DollarSign, ArrowRight, Layers, HandMetal, AlertTriangle, CheckCircle, XCircle, Divide, Flame, Skull, Zap, RotateCcw, Settings, X, Coins, ShieldCheck, MousePointerClick, Flag } from 'lucide-react';
 
 // 2. 从全局变量中获取 React 功能
 const { useState, useEffect, useMemo } = React;
-// const { createRoot } = ReactDOM; // 移除: 渲染逻辑移交至 HTML 入口文件
+const { createRoot } = ReactDOM;
 
 /**
  * 德州扑克助手 Pro (Texas Hold'em Advisor Pro)
- * Version 3.7 Fix: 
- * 1. Removed `createRoot` and `root.render` from the end of this file.
- * This file now purely exports the main component `TexasHoldemAdvisor`.
- * The rendering responsibility is moved to the main HTML file to prevent "createRoot called twice" warnings.
- * 2. Maintained all previous logic (Stack-based Open, Hybrid Bet Sizing, Fold, etc.).
+ * Version 3.8 Final Fix:
+ * 1. Restored rendering logic so the app loads correctly.
+ * 2. Implemented a Singleton Root pattern to prevent "createRoot called twice" warnings.
+ * 3. Contains all features: Smart Open Sizes, Fold, Hybrid Bet Sizing, Side Pots, etc.
  */
 
 // --- 常量定义 ---
@@ -1008,4 +1004,17 @@ export default function TexasHoldemAdvisor() {
   function handleCardClick(type, index) {
     setSelectingFor({ type, index });
   }
+}
+
+// ⚠️ 核心修复逻辑：Singleton Root Pattern (单例模式)
+// 检查 'root' 容器上是否已经绑定了 React Root
+const container = document.getElementById('root');
+
+if (container) {
+  // 如果容器上还没有 _reactRoot，创建一个并挂载
+  if (!container._reactRoot) {
+    container._reactRoot = createRoot(container);
+  }
+  // 复用已有的 Root 进行渲染
+  container._reactRoot.render(<TexasHoldemAdvisor />);
 }
