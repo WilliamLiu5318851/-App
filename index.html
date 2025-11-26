@@ -22,10 +22,30 @@
         body { background-color: #0f172a; color: white; touch-action: manipulation; }
         .loading { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; color: #94a3b8; text-align: center; padding: 20px; }
         input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-        .error-box { color: #ef4444; margin-top: 20px; font-size: 0.875rem; max-width: 80%; word-break: break-word; }
+        .error-box { 
+            color: #f87171; 
+            background: rgba(255,0,0,0.1);
+            border: 1px solid #ef4444;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 20px; 
+            font-size: 0.875rem; 
+            max-width: 90%; 
+            word-break: break-word; 
+            text-align: left;
+            display: none; /* 默认隐藏 */
+        }
+        .code-block {
+            background: #1e293b;
+            padding: 0.5rem;
+            border-radius: 4px;
+            font-family: monospace;
+            margin-top: 0.5rem;
+            color: #e2e8f0;
+        }
     </style>
     
-    <!-- Import Map: 告诉浏览器 react 从哪里加载 -->
+    <!-- Import Map -->
     <script type="importmap">
     {
       "imports": {
@@ -45,9 +65,42 @@
         </div>
     </div>
 
-    <!-- 关键修改：这里不再写代码，而是通过 src 引用外部文件 -->
-    <!-- data-plugins="transform-modules-umd" 尝试解决某些模块加载问题 -->
-    <!-- 注意：本地直接打开(file://)可能会跨域报错，必须用 Live Server 或传到 Netlify -->
+    <!-- 错误捕捉脚本 -->
+    <script>
+        // 捕捉全局错误
+        window.addEventListener('error', function(event) {
+            showError(`脚本错误: ${event.message}`);
+        });
+
+        // 捕捉资源加载错误 (比如 404 或 CORS)
+        window.addEventListener('unhandledrejection', function(event) {
+            showError(`Promise 错误: ${event.reason}`);
+        });
+
+        function showError(msg) {
+            const el = document.getElementById('error-display');
+            const isFileProtocol = window.location.protocol === 'file:';
+            
+            let helpText = "";
+            if (isFileProtocol) {
+                helpText = `
+                    <div style="margin-top:10px; font-weight:bold; color: #fbbf24;">⚠️ 检测到你在本地直接打开了文件 (file://)</div>
+                    <div style="margin-top:5px;">浏览器禁止直接读取 .jsx 文件。请尝试：</div>
+                    <ul style="list-style: disc; margin-left: 20px; margin-top: 5px;">
+                        <li>使用 VS Code 的 <b>"Live Server"</b> 插件打开</li>
+                        <li>或者推送到 Netlify/Vercel 查看</li>
+                        <li>或者在终端运行 <code>python -m http.server</code></li>
+                    </ul>
+                `;
+            }
+
+            el.innerHTML = `<div>${msg}</div>${helpText}`;
+            el.style.display = 'block';
+        }
+    </script>
+
+    <!-- 核心逻辑引入 -->
+    <!-- 注意：这在 file:// 协议下会失败，必须用 http:// localhost 或服务器 -->
     <script type="text/babel" data-type="module" src="./PokerAdvisorPro.jsx"></script>
 </body>
 </html>
