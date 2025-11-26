@@ -980,3 +980,5 @@ export default function TexasHoldemAdvisor() {
     setSelectingFor({ type, index });
   }
 }
+const root = createRoot(document.getElementById('root'));
+root.render(<TexasHoldemAdvisor />);
