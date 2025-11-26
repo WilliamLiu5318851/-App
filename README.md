@@ -1,6 +1,8 @@
-Poker Advisor Pro (德州扑克智囊 Pro)
+[Poker Advisor Pro (德州扑克智囊 Pro)
 
-Live Demo: https://pokeradvice.netlify.app/
+![Poker Advisor Pro Banner](linkimg.jpg)
+
+> **Live Demo:** [https://pokeradvice.netlify.app/](https://pokeradvice.netlify.app/)
 
 📖 Introduction (项目介绍)
 
@@ -124,4 +126,4 @@ Major: Computer Science Undergraduate
 
 Expected Graduation: Sep 2026
 
-Disclaimer: This tool is for educational and simulation purposes only. (免责声明：本工具仅用于教育和模拟目的。)
+Disclaimer: This tool is for educational and simulation purposes only. (免责声明：本工具仅用于教育和模拟目的。)](https://gemini.google.com/share/4cf188c0901e)
