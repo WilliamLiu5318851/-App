@@ -18,10 +18,10 @@ const { SUITS, RANKS, RANK_VALUES, STREETS } = CONSTANTS;
 
 /**
  * 德州扑克助手 Pro (Texas Hold'em Advisor Pro)
- * Version 4.6 Fix:
- * 1. Integrated with PokerData.js (Data Separation).
- * 2. Applied Singleton Root Pattern to fix "createRoot" console warnings.
- * 3. Kept all v4.5 logic (Hand Analysis, Smart Bet Sizing).
+ * Version 4.0 Fix:
+ * 1. Fixed Straight Draw logic to correctly identify "Wheel Draws" (Ace as 1).
+ * Example: Hand [3, 4], Board [A, 2] -> Recognized as Gutshot (A-2-3-4 needs 5).
+ * 2. This aligns the "Hand Label" with the high Equity calculated by the Monte Carlo engine.
  */
 
 // --- Poker Logic Helpers ---
@@ -64,7 +64,7 @@ const evaluateHand = (cards) => {
   return ranks[0];
 };
 
-// --- 核心分析函数 ---
+// --- 核心分析函数 (已修复 Ace 听牌逻辑) ---
 const analyzeHandFeatures = (heroCards, communityCards) => {
   if (!heroCards[0] || !heroCards[1]) return null;
   
@@ -165,13 +165,37 @@ const analyzeHandFeatures = (heroCards, communityCards) => {
       flushDrawType = hasNutAttr ? "flush_draw_nut" : "flush_draw";
     }
 
-    // Straight Draw
+    // Straight Draw (Updated Logic to handle Ace as 1)
     let straightDrawType = null;
-    for (let i = 0; i <= uniqueRanks.length - 4; i++) {
-      const window = uniqueRanks.slice(i, i + 4);
+    
+    // Create a set of ranks that includes 1 if 14 (Ace) is present
+    let drawRanks = [...uniqueRanks];
+    if (uniqueRanks.includes(14)) {
+        drawRanks.unshift(1); // Add 1 to checking array
+    }
+    // Re-sort just in case, though uniqueRanks is sorted ascending
+    drawRanks.sort((a,b) => a-b);
+
+    for (let i = 0; i <= drawRanks.length - 4; i++) {
+      const window = drawRanks.slice(i, i + 4);
+      // Check distance between 4 cards. 
+      // e.g. 2,3,4,5 -> span 3 (OESD)
+      // e.g. 2,3,5,6 -> span 4 (Gutshot)
+      // e.g. 1,2,3,4 -> span 3 (Wheel Draw A-2-3-4). Special case: only 5 helps. So Gutshot logic.
       const span = window[window.length - 1] - window[0];
+      
       if (span <= 4) { 
-        straightDrawType = (span === 3) ? "straight_draw_oesd" : "straight_draw_gutshot";
+        if (span === 3) {
+            // Consecutive 4 cards. 
+            // If it starts with 1 (A-2-3-4), it's restricted (only 5 works), so treat as Gutshot strength.
+            if (window[0] === 1) straightDrawType = "straight_draw_gutshot";
+            else straightDrawType = "straight_draw_oesd";
+        } else {
+            straightDrawType = "straight_draw_gutshot";
+        }
+        
+        // If we found OESD, that's the best draw, stick with it.
+        if (straightDrawType === "straight_draw_oesd") break;
       }
     }
 
@@ -535,25 +559,28 @@ function TexasHoldemAdvisor() {
         }
       }
 
-      // Bet Sizing Logic with Capping
+      // --- 核心修改：混合权重下注算法 (Hybrid Bet Sizing) ---
       if (adviceKey.includes('raise') || adviceKey.includes('allin')) {
-        const p = totalPot;
-        const s = heroStack;
+        const p = totalPot; // 底池
+        const s = heroStack; // 剩余筹码
         
         const cap = (val) => Math.min(val, s);
 
         let smallBase, medBase, largeBase;
 
-        // Hybrid Sizing Logic
+        // 取 “基于底池的比例” 和 “基于筹码的开池比例” 中的较大者
         if (strategy === 'maniac') {
+           // 疯鱼模式：底池倍率更高，或者直接开池 5% - 20% 筹码
            smallBase = Math.max(p * 0.33, s * 0.05);
            medBase   = Math.max(p * 0.66, s * 0.10);
            largeBase = Math.max(p * 1.5,  s * 0.20); 
         } else if (strategy === 'aggressive') {
+           // 激进模式：3% - 12% 筹码
            smallBase = Math.max(p * 0.33, s * 0.03);
            medBase   = Math.max(p * 0.66, s * 0.06);
            largeBase = Math.max(p * 1.0,  s * 0.12);
         } else {
+           // 保守模式：2% - 8% 筹码
            smallBase = Math.max(p * 0.33, s * 0.02);
            medBase   = Math.max(p * 0.66, s * 0.04);
            largeBase = Math.max(p * 1.0,  s * 0.08);
@@ -566,7 +593,7 @@ function TexasHoldemAdvisor() {
         };
       }
 
-      // --- Integration: Hand Analysis ---
+      // --- 集成: 手牌特征分析 ---
       const analysisKey = analyzeHandFeatures(heroHand, communityCards);
       const analysisData = analysisKey ? HAND_ANALYSIS_DEFINITIONS[lang][analysisKey] : null;
 
@@ -661,6 +688,7 @@ function TexasHoldemAdvisor() {
     );
   };
 
+  // Settlement UI Helpers
   const getPotSplit = () => {
     const heroTotal = heroTotalContributed + heroBet;
     const sidePot = players.reduce((sum, p) => {
