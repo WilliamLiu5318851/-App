@@ -1,11 +1,11 @@
-// 1. 图标库
-import { RefreshCw, Trophy, Users, Globe, Brain, Info, DollarSign, ArrowRight, Layers, HandMetal, AlertTriangle, CheckCircle, XCircle, Divide, Flame, Skull, Zap, RotateCcw, Settings, X, Coins, ShieldCheck, MousePointerClick, Flag, Lightbulb, CheckSquare, Grid } from 'lucide-react';
+// 1. 圖標庫
+import { RefreshCw, Trophy, Users, Globe, Brain, Info, DollarSign, ArrowRight, Layers, HandMetal, AlertTriangle, CheckCircle, XCircle, Divide, Flame, Skull, Zap, RotateCcw, Settings, X, Coins, ShieldCheck, MousePointerClick, Flag, Lightbulb, CheckSquare, Grid, BoxSelect } from 'lucide-react';
 
 // 2. 全局 React
 const { useState, useEffect, useMemo } = React;
 const { createRoot } = ReactDOM;
 
-// 3. 数据层 (带完整 Fallback)
+// 3. 數據層接入 (Deep Integration with v6.0 Data)
 const { CONSTANTS, HAND_ANALYSIS_DEFINITIONS, TEXTURE_STRATEGIES, TEXTS } = window.PokerData || {
   CONSTANTS: { 
     SUITS: ['s', 'h', 'd', 'c'],
@@ -21,14 +21,14 @@ const { CONSTANTS, HAND_ANALYSIS_DEFINITIONS, TEXTURE_STRATEGIES, TEXTS } = wind
 const { SUITS, RANKS, RANK_VALUES, STREETS } = CONSTANTS;
 
 /**
- * 德州扑克助手 Pro (Texas Hold'em Advisor Pro)
- * Version 5.0 Logic Upgrade:
- * 1. Implemented Board Texture Analysis (Rainbow, Two-Tone, Monotone, Paired).
- * 2. Integrated Texture Strategies from PokerData.js into the advice engine.
- * 3. Advice now combines Hand Strength + Board Texture for GTO-like precision.
+ * 德州撲克助手 Pro (Texas Hold'em Advisor Pro)
+ * Version 6.0 Logic Upgrade:
+ * 1. Implemented G1-G6 Pre-flop Hand Categorization Logic matching the new Data Layer.
+ * 2. Added "Texture Strategy" display in the UI (showing Frequency & Sizing advice).
+ * 3. Full synchronization with v6.0 PokerData.js.
  */
 
-// --- 核心辅助函数：判断是否为同花顺 ---
+// --- 核心輔助函數 ---
 const getStraightFlushHigh = (cards) => {
   if (cards.length < 5) return 0;
   const suits = {};
@@ -48,7 +48,7 @@ const getStraightFlushHigh = (cards) => {
   return 0;
 };
 
-// --- 核心牌力评估 (Monte Carlo 使用) ---
+// --- 核心牌力評估 (Monte Carlo) ---
 const evaluateHand = (cards) => {
   if (!cards || cards.length < 5) return 0;
   const sfHigh = getStraightFlushHigh(cards);
@@ -92,31 +92,26 @@ const evaluateHand = (cards) => {
   return ranks[0];
 };
 
-// --- 新增：牌面纹理分析 (Board Texture Analyzer) ---
+// --- 牌面紋理分析 (Texture Analyzer) ---
 const analyzeBoardTexture = (communityCards) => {
   const board = communityCards.filter(Boolean);
-  if (board.length < 3) return null; // Pre-flop has no texture
+  if (board.length < 3) return null; 
 
-  // 1. Suit Analysis
   const suits = {};
   board.forEach(c => suits[c.suit] = (suits[c.suit] || 0) + 1);
   const maxSuitCount = Math.max(...Object.values(suits));
 
-  // 2. Pair Analysis
   const ranks = board.map(c => RANK_VALUES[c.rank]);
   const rankCounts = {};
   ranks.forEach(r => rankCounts[r] = (rankCounts[r] || 0) + 1);
   const maxRankCount = Math.max(...Object.values(rankCounts));
 
-  // 3. Connectedness (Simplified)
   const uniqueRanks = [...new Set(ranks)].sort((a,b) => a-b);
   let isConnected = false;
-  // Check for 3 cards within a span of 4 (e.g. 5,6,8)
   for(let i=0; i<=uniqueRanks.length-3; i++) {
       if (uniqueRanks[i+2] - uniqueRanks[i] <= 4) isConnected = true;
   }
 
-  // --- Classify ---
   if (maxRankCount >= 2) return 'TEX_PAIRED';
   if (maxSuitCount >= 3) return 'TEX_MONOTONE';
   if (maxSuitCount === 2) return 'TEX_TWO_TONE';
@@ -124,47 +119,54 @@ const analyzeBoardTexture = (communityCards) => {
   return 'TEX_RAINBOW_DRY';
 };
 
-// --- 核心分析函数 (UI 显示逻辑) ---
+// --- 核心分析函數 (UI Label Logic - Updated for v6.0 G-Categories) ---
 const analyzeHandFeatures = (heroCards, communityCards) => {
   if (!heroCards[0] || !heroCards[1]) return null;
   
   const h1_rank = RANK_VALUES[heroCards[0].rank];
   const h2_rank = RANK_VALUES[heroCards[1].rank];
-  const h1 = Math.max(h1_rank, h2_rank);
-  const h2 = Math.min(h1_rank, h2_rank);
+  const h1 = Math.max(h1_rank, h2_rank); // Big Card
+  const h2 = Math.min(h1_rank, h2_rank); // Small Card
   const isSuited = heroCards[0].suit === heroCards[1].suit;
   const isPair = h1 === h2;
 
   const board = communityCards.filter(Boolean);
   
-  // Pre-flop
+  // === 1. Pre-flop Analysis (G1-G6 Logic) ===
   if (board.length === 0) {
       if (isPair) {
-          if (h1 >= 12) return "pre_monster_pair";
-          if (h1 >= 9) return "pre_strong_pair"; 
-          return "pre_small_pair";
+          if (h1 >= 12) return "pre_monster_pair"; // G1: QQ, KK, AA
+          if (h1 === 11) return "pre_premium_high"; // G2: JJ (often treated as premium/strong linear)
+          if (h1 >= 7) return "pre_strong_pair";   // G3/G4: 77-TT
+          return "pre_small_pair";                 // 22-66
       }
-      if (h1 >= 13 && h2 >= 12) return "pre_premium_high";
-      if (h1 === 14 && h2 >= 10) return "pre_premium_high";
-      if (isSuited) {
-          if (h1 === 14) return "pre_suited_ace";
-          if (h1 - h2 === 1 && h1 <= 11) return "pre_suited_connector";
-          // New: Suited Gapper logic (e.g. T8s)
-          if (h1 - h2 === 2 && h1 <= 11) return "pre_suited_gapper";
-          if (h1 >= 10 && h2 >= 10) return "pre_broadway";
-      }
+      
+      // Non-Pairs
+      // G2: AKs, AKo, AQs
+      if (h1 === 14 && h2 === 13) return "pre_premium_high"; // AK
+      if (isSuited && h1 === 14 && h2 === 12) return "pre_premium_high"; // AQs
+
+      // G6: Wheel Aces (A2s - A5s)
+      if (isSuited && h1 === 14 && h2 <= 5) return "pre_suited_ace";
+
+      // G5: Suited Connectors (T9s, 98s, 87s... down to 54s)
+      // Definition: Gap=1, Suited, High Card between 5 and 10 (to exclude broadways like QJs)
+      if (isSuited && (h1 - h2 === 1) && h1 <= 10 && h1 >= 5) return "pre_suited_connector";
+
+      // Broadways (KJ, QJ, AT etc.)
       if (h1 >= 10 && h2 >= 10) return "pre_broadway";
+      
       return "pre_trash";
   }
 
-  // Post-flop
+  // === 2. Post-flop Analysis ===
   const isRiver = board.length === 5;
   const allCards = [...heroCards, ...board];
   
   const sfHigh = getStraightFlushHigh(allCards);
   if (sfHigh > 0) return "made_straight_flush";
 
-  const ranks = allCards.map(c => RANK_VALUES[c.rank]).sort((a, b) => b - a);
+  const ranks = allCards.map(c => RANK_VALUES[c.rank]).sort((a, b) => b - a); // Descending
   const uniqueRanks = [...new Set(ranks)];
   const rankCounts = {};
   ranks.forEach(r => rankCounts[r] = (rankCounts[r] || 0) + 1);
@@ -199,8 +201,9 @@ const analyzeHandFeatures = (heroCards, communityCards) => {
     if (r === h2_rank) heroRankCounts[h2_rank]++;
   });
   const hitCount = Math.max(heroRankCounts[h1_rank], heroRankCounts[h2_rank]);
-  if (hitCount >= 3) return "monster"; 
+  if (hitCount >= 3) return "monster"; // Trips/Set
 
+  // Draws
   if (!isRiver) {
     const fdSuit = Object.keys(suits).find(s => suits[s] === 4);
     let flushDrawType = null;
@@ -227,9 +230,6 @@ const analyzeHandFeatures = (heroCards, communityCards) => {
         }
     }
 
-    // New: Pair + Draw logic
-    if ((hitCount === 2) && (flushDrawType || straightDrawType)) return "pair_plus_draw";
-
     if (flushDrawType && straightDrawType) return "combo_draw";
     if (flushDrawType) return flushDrawType;
     if (straightDrawType) return straightDrawType;
@@ -240,7 +240,7 @@ const analyzeHandFeatures = (heroCards, communityCards) => {
   
   if (hitCount === 2) {
     if (isPair) {
-      return h1 > maxBoardRank ? "overpair" : (h1 > boardRanks[0] ? "top_pair" : "pocket_pair_below"); 
+      return h1 > maxBoardRank ? "top_pair" : (h1 > boardRanks[0] ? "top_pair" : "pocket_pair_below"); 
     } else {
       const pairRank = heroRankCounts[h1_rank] === 2 ? h1_rank : h2_rank;
       if (pairRank === maxBoardRank) return "top_pair";
@@ -313,16 +313,8 @@ function TexasHoldemAdvisor() {
   
   const spr = currentStack > 0 && totalPot > 0 ? (currentStack / totalPot).toFixed(2) : '∞';
 
-  // Call Button Logic
-  const maxOpponentBet = Math.max(0, ...players.map(p => p.bet));
-  const amountToCall = Math.max(0, maxOpponentBet); 
-  const isCallAction = amountToCall > heroBet; 
-  const safeCallAmount = Math.min(amountToCall, heroStack);
-  const isCallAllIn = safeCallAmount >= heroStack;
-  
-  const handleCall = () => setHeroBet(safeCallAmount);
-
   // Actions
+  const handleCall = () => setHeroBet(Math.min(Math.max(0, maxOpponentBet), heroStack));
   const handleHeroBetChange = (val) => {
     if (val === '') { setHeroBet(0); return; }
     let newBet = Number(val);
@@ -330,37 +322,17 @@ function TexasHoldemAdvisor() {
     if (newBet > heroStack) newBet = heroStack;
     setHeroBet(newBet);
   };
-
-  const handleStackChange = (val) => {
-    if (val === '') { setHeroStack(0); return; }
-    let newStack = Number(val);
-    if (newStack < 0) newStack = 0;
-    setHeroStack(newStack);
-  };
-
-  const handleBuyInChange = (val) => {
-    if (val === '') { setBuyInAmount(0); return; }
-    setBuyInAmount(Number(val));
-  };
-
-  const handleOpponentBetChange = (id, val) => {
-    let newBet = val === '' ? 0 : Number(val);
-    setPlayers(players.map(p => p.id === id ? { ...p, bet: newBet } : p));
-  };
+  const handleStackChange = (val) => setHeroStack(val === '' ? 0 : Math.max(0, Number(val)));
+  const handleBuyInChange = (val) => setBuyInAmount(val === '' ? 0 : Math.max(0, Number(val)));
+  const handleOpponentBetChange = (id, val) => setPlayers(players.map(p => p.id === id ? { ...p, bet: val === '' ? 0 : Number(val) } : p));
 
   const handleFold = () => {
     const remainingStack = heroStack - heroBet;
     setHeroStack(Math.max(0, remainingStack));
-    setStreet(0);
-    setMainPot(0);
-    setHeroBet(0);
-    setHeroTotalContributed(0);
+    setStreet(0); setMainPot(0); setHeroBet(0); setHeroTotalContributed(0);
     setPlayers(players.map(p => ({ ...p, bet: 0, totalContributed: 0, active: true })));
-    setHeroHand([null, null]);
-    setCommunityCards([null, null, null, null, null]);
-    setResult(null);
-    setSettlementMode(false);
-    setPotSegments([]);
+    setHeroHand([null, null]); setCommunityCards([null, null, null, null, null]);
+    setResult(null); setSettlementMode(false); setPotSegments([]);
   };
 
   const cycleStrategy = () => {
@@ -391,16 +363,10 @@ function TexasHoldemAdvisor() {
     setPlayers(players.map(p => ({ ...p, totalContributed: (p.totalContributed || 0) + p.bet, bet: 0 })));
     setHeroStack(prev => Math.max(0, prev - heroBet));
     setHeroBet(0);
-    
-    if (street < 3) {
-      setStreet(street + 1);
-      setResult(null);
-    } else {
-      enterSettlement();
-    }
+    if (street < 3) { setStreet(street + 1); setResult(null); } 
+    else { enterSettlement(); }
   };
 
-  // Pot Segmentation Logic
   const enterSettlement = () => {
     const heroTotal = heroTotalContributed + heroBet;
     const opps = players.map(p => ({ ...p, finalTotal: (p.totalContributed || 0) + p.bet }));
@@ -426,20 +392,14 @@ function TexasHoldemAdvisor() {
           if (p.active) contributors++; 
         }
       });
-      if (potSize > 0 && heroInvolved) {
-        segments.push({ id: cap, amount: potSize, contestants: contributors, result: 'loss' });
-      }
+      if (potSize > 0 && heroInvolved) segments.push({ id: cap, amount: potSize, contestants: contributors, result: 'loss' });
       prevCap = cap;
     });
-
-    setPotSegments(segments);
-    setSettlementMode(true);
+    setPotSegments(segments); setSettlementMode(true);
   };
 
   const updateSegmentResult = (idx, res) => {
-    const newSegments = [...potSegments];
-    newSegments[idx].result = res;
-    setPotSegments(newSegments);
+    const newSegments = [...potSegments]; newSegments[idx].result = res; setPotSegments(newSegments);
   };
 
   const confirmSettlement = () => {
@@ -448,34 +408,24 @@ function TexasHoldemAdvisor() {
       if (seg.result === 'win') winnings += seg.amount;
       else if (seg.result === 'split') winnings += Math.floor(seg.amount / seg.contestants); 
     });
-    const finalStack = (heroStack - heroBet) + winnings;
-    setHeroStack(Math.max(0, finalStack));
+    setHeroStack(Math.max(0, (heroStack - heroBet) + winnings));
     
-    setStreet(0);
-    setMainPot(0);
-    setHeroBet(0);
-    setHeroTotalContributed(0);
+    setStreet(0); setMainPot(0); setHeroBet(0); setHeroTotalContributed(0);
     setPlayers(players.map(p => ({ ...p, bet: 0, totalContributed: 0, active: true })));
-    setHeroHand([null, null]);
-    setCommunityCards([null, null, null, null, null]);
-    setResult(null);
-    setSettlementMode(false);
+    setHeroHand([null, null]); setCommunityCards([null, null, null, null, null]);
+    setResult(null); setSettlementMode(false);
   };
 
   const calculateEquity = () => {
     if (heroHand.some(c => c === null)) return;
-    setIsCalculating(true);
-    setResult(null);
+    setIsCalculating(true); setResult(null);
 
     setTimeout(() => {
       const SIMULATIONS = 1500;
-      let wins = 0;
-      let ties = 0;
+      let wins = 0; let ties = 0;
       const activeOpponents = players.filter(p => p.active).length;
       let fullDeck = [];
-      for (let d = 0; d < deckCount; d++) {
-        for (let s of SUITS) for (let r of RANKS) fullDeck.push({ rank: r, suit: s });
-      }
+      for (let d = 0; d < deckCount; d++) for (let s of SUITS) for (let r of RANKS) fullDeck.push({ rank: r, suit: s });
       const knownCards = [...heroHand, ...communityCards].filter(Boolean);
       
       for (let i = 0; i < SIMULATIONS; i++) {
@@ -493,8 +443,7 @@ function TexasHoldemAdvisor() {
         const oppHands = [];
         for (let p = 0; p < activeOpponents; p++) oppHands.push([currentDeck.pop(), currentDeck.pop()]);
         const heroScore = evaluateHand([...heroHand, ...runout]);
-        let heroWins = true; 
-        let isTie = false;
+        let heroWins = true; let isTie = false;
         for (let oh of oppHands) {
           const s = evaluateHand([...oh, ...runout]);
           if (s > heroScore) { heroWins = false; break; }
@@ -506,14 +455,11 @@ function TexasHoldemAdvisor() {
 
       const equity = ((wins + (ties/2)) / SIMULATIONS) * 100;
       
-      // Basic Strategy & Bet Sizing
       const potOdds = totalPot > 0 ? (callAmount / (totalPot + callAmount)) * 100 : 0;
       let adviceKey = 'advice_fold';
       let reasonKey = 'reason_odds';
       let betSizes = null;
-      let buffer = 1.1; 
-      if (strategy === 'aggressive') buffer = 0.9;
-      if (strategy === 'maniac') buffer = 0.6; 
+      let buffer = strategy === 'aggressive' ? 0.9 : strategy === 'maniac' ? 0.6 : 1.1; 
       const requiredEquity = potOdds * buffer;
 
       if (parseFloat(spr) < 1.5 && equity > (strategy === 'maniac' ? 15 : 30)) {
@@ -533,29 +479,17 @@ function TexasHoldemAdvisor() {
       }
 
       if (adviceKey.includes('raise') || adviceKey.includes('allin')) {
-        const p = totalPot;
-        const s = heroStack;
+        const p = totalPot; const s = heroStack;
         const cap = (val) => Math.min(val, s);
         let smallBase, medBase, largeBase;
-        if (strategy === 'maniac') {
-           smallBase = Math.max(p * 0.33, s * 0.05);
-           medBase   = Math.max(p * 0.66, s * 0.10);
-           largeBase = Math.max(p * 1.5,  s * 0.20); 
-        } else if (strategy === 'aggressive') {
-           smallBase = Math.max(p * 0.33, s * 0.03);
-           medBase   = Math.max(p * 0.66, s * 0.06);
-           largeBase = Math.max(p * 1.0,  s * 0.12);
-        } else {
-           smallBase = Math.max(p * 0.33, s * 0.02);
-           medBase   = Math.max(p * 0.66, s * 0.04);
-           largeBase = Math.max(p * 1.0,  s * 0.08);
-        }
+        if (strategy === 'maniac') { smallBase = Math.max(p * 0.33, s * 0.05); medBase = Math.max(p * 0.66, s * 0.10); largeBase = Math.max(p * 1.5, s * 0.20); }
+        else if (strategy === 'aggressive') { smallBase = Math.max(p * 0.33, s * 0.03); medBase = Math.max(p * 0.66, s * 0.06); largeBase = Math.max(p * 1.0, s * 0.12); }
+        else { smallBase = Math.max(p * 0.33, s * 0.02); medBase = Math.max(p * 0.66, s * 0.04); largeBase = Math.max(p * 1.0, s * 0.08); }
         betSizes = { small: cap(Math.round(smallBase)), med: cap(Math.round(medBase)), large: cap(Math.round(largeBase)) };
       }
 
-      // --- 深度分析集成 ---
       const analysisKey = analyzeHandFeatures(heroHand, communityCards);
-      const textureKey = analyzeBoardTexture(communityCards); // New: Board Texture
+      const textureKey = analyzeBoardTexture(communityCards);
       
       const analysisData = analysisKey ? HAND_ANALYSIS_DEFINITIONS[lang][analysisKey] : null;
       const textureData = textureKey ? TEXTURE_STRATEGIES[textureKey] : null;
@@ -564,22 +498,18 @@ function TexasHoldemAdvisor() {
       let finalReason = t[reasonKey];
       let handLabel = null;
 
-      // 1. 融合手牌分析 (Hand Analysis Overrides)
       if (analysisData) {
         finalReason = analysisData.reason;
         handLabel = analysisData.label;
-        // 对于强牌和强听牌，强制使用分析建议
         if (analysisKey.startsWith('made_') || analysisKey === 'monster' || analysisKey === 'pre_monster_pair' || analysisKey === 'combo_draw' || analysisKey === 'flush_draw_nut') {
            finalAdvice = analysisData.advice;
         }
-        // 垃圾牌保护
         if (analysisKey === 'pre_trash' && strategy !== 'maniac' && callAmount > 0) {
             finalAdvice = t.advice_fold;
         }
       }
 
-      // 2. 融合牌面纹理 (Texture Context)
-      if (textureData && callAmount === 0) { // 仅在没人下注时参考纹理进行C-bet建议
+      if (textureData && callAmount === 0) { 
          finalReason += `\n[${textureData.name}]: ${textureData.desc}`;
       }
 
@@ -590,7 +520,7 @@ function TexasHoldemAdvisor() {
         advice: finalAdvice,
         reason: finalReason,
         handTypeLabel: handLabel,
-        textureLabel: textureData ? textureData.name : null, // 新增: 纹理标签
+        textureLabel: textureData ? textureData.name : null,
         betSizes,
         isBluff: adviceKey.includes('bluff')
       });
@@ -665,6 +595,13 @@ function TexasHoldemAdvisor() {
   const { sidePot, eligiblePot } = settlementMode ? getPotSplit() : { sidePot: 0, eligiblePot: 0 };
 
   function handleCardClick(type, index) { setSelectingFor({ type, index }); }
+
+  // Call Button Logic (Derived for UI)
+  const maxOpponentBet = Math.max(0, ...players.map(p => p.bet));
+  const amountToCall = Math.max(0, maxOpponentBet);
+  const isCallAction = amountToCall > heroBet;
+  const safeCallAmount = Math.min(amountToCall, heroStack);
+  const isCallAllIn = safeCallAmount >= heroStack;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-10">
@@ -752,7 +689,7 @@ function TexasHoldemAdvisor() {
                     <div className="flex gap-1 mb-1">
                         <button onClick={handleFold} className="flex-1 flex items-center justify-center gap-1 text-[10px] bg-slate-700 hover:bg-slate-600 text-slate-300 py-1.5 rounded shadow-sm transition font-bold tracking-wider border border-slate-600"><Flag className="w-3 h-3" /> {t.btn_fold}</button>
                         <button onClick={handleCall} disabled={heroStack === 0} className={`flex-1 flex items-center justify-center gap-1 text-[10px] py-1.5 rounded shadow-sm transition font-bold tracking-wider ${isCallAllIn ? 'bg-red-800 text-red-100 hover:bg-red-700 border border-red-600 animate-pulse' : 'bg-blue-600 text-white hover:bg-blue-500 border border-blue-500'} ${heroStack === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}>{isCallAction ? (isCallAllIn ? <><Zap className="w-3 h-3 fill-current"/> {t.btn_call_allin} ${safeCallAmount}</> : <><CheckSquare className="w-3 h-3"/> {t.btn_call} ${safeCallAmount}</>) : (<><CheckCircle className="w-3 h-3"/> {t.btn_check}</>)}</button>
-                        <button onClick={() => handleHeroBetChange(heroStack)} disabled={heroStack === 0} className={`flex-1 flex items-center justify-center gap-1 text-[10px] py-1.5 rounded shadow-sm transition font-bold tracking-wider ${heroStack === 0 ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-red-600 hover:bg-red-500 text-white'}`}><Zap className="w-3 h-3 fill-current" /> {t.btn_allin}</button>
+                        <button onClick={() => setHeroBet(heroStack)} disabled={heroStack === 0} className={`flex-1 flex items-center justify-center gap-1 text-[10px] py-1.5 rounded shadow-sm transition font-bold tracking-wider ${heroStack === 0 ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-red-600 hover:bg-red-500 text-white'}`}><Zap className="w-3 h-3 fill-current" /> {t.btn_allin}</button>
                     </div>
                     <input type="number" value={heroBet === 0 ? '' : heroBet} onChange={(e) => handleHeroBetChange(e.target.value)} disabled={heroStack === 0} placeholder="0" className={`w-full bg-slate-950 border border-slate-700 rounded px-2 py-2 font-mono transition focus:outline-none ${heroStack === 0 ? 'opacity-50 cursor-not-allowed text-slate-500' : 'text-white focus:border-red-500'}`} />
                  </div>
@@ -782,40 +719,6 @@ function TexasHoldemAdvisor() {
              ))}
           </div>
         </div>
-
-        {/* Settlement / Result */}
-        {settlementMode ? (
-          <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden animate-in fade-in zoom-in-95 duration-300">
-            <div className="p-4 bg-indigo-900/20 border-b border-indigo-900/50">
-              <h2 className="text-xl font-bold text-center text-indigo-200">{t.settle_title}</h2>
-              <div className="text-center text-3xl font-bold mt-2 text-white"><span className="text-sm text-slate-400">$</span> {totalPot}</div>
-            </div>
-            <div className="p-4 space-y-3">
-              {potSegments.map((seg, idx) => (
-                <div key={idx} className="bg-slate-800 rounded-lg p-3 border border-slate-700">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-sm text-slate-300 font-bold flex items-center gap-2">
-                      {idx === 0 ? <ShieldCheck className="w-4 h-4 text-emerald-400"/> : <Layers className="w-4 h-4 text-blue-400"/>}
-                      {idx === 0 ? t.segment_main : `${t.segment_side} #${idx}`}
-                    </span>
-                    <span className="font-mono text-lg text-white">${seg.amount}</span>
-                  </div>
-                  <div className="flex gap-2">
-                     <button onClick={() => updateSegmentResult(idx, 'win')} className={`flex-1 py-1 rounded text-xs font-bold transition border ${seg.result === 'win' ? 'bg-emerald-600 border-emerald-500 text-white' : 'bg-slate-700 border-slate-600 text-slate-400 hover:bg-slate-600'}`}>{t.settle_win}</button>
-                     <button onClick={() => updateSegmentResult(idx, 'split')} className={`flex-1 py-1 rounded text-xs font-bold transition border ${seg.result === 'split' ? 'bg-blue-600 border-blue-500 text-white' : 'bg-slate-700 border-slate-600 text-slate-400 hover:bg-slate-600'}`}>{t.settle_split}</button>
-                     <button onClick={() => updateSegmentResult(idx, 'loss')} className={`flex-1 py-1 rounded text-xs font-bold transition border ${seg.result === 'loss' ? 'bg-red-900/50 border-red-800 text-red-200' : 'bg-slate-700 border-slate-600 text-slate-400 hover:bg-slate-600'}`}>{t.settle_loss}</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <button onClick={confirmSettlement} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 text-center transition border-t border-emerald-500">{t.settle_confirm}</button>
-          </div>
-        ) : (
-          <button onClick={calculateEquity} disabled={isCalculating} className={`w-full font-bold py-4 rounded-xl shadow-lg active:scale-95 transition flex items-center justify-center gap-2 ${strategy === 'maniac' ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-purple-900/30' : 'bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white shadow-blue-900/20'}`}>
-            {isCalculating ? <RefreshCw className="animate-spin w-5 h-5"/> : (strategy === 'maniac' ? <Skull className="w-5 h-5" /> : <Brain className="w-5 h-5"/>)}
-            {isCalculating ? t.calculating : t.calculate}
-          </button>
-        )}
 
         {/* Result */}
         {result && !settlementMode && (
@@ -855,6 +758,35 @@ function TexasHoldemAdvisor() {
                  </div>
                </div>
              )}
+          </div>
+        )}
+        
+        {/* Settlement UI */}
+        {settlementMode && (
+          <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden animate-in fade-in zoom-in-95 duration-300">
+            <div className="p-4 bg-indigo-900/20 border-b border-indigo-900/50">
+              <h2 className="text-xl font-bold text-center text-indigo-200">{t.settle_title}</h2>
+              <div className="text-center text-3xl font-bold mt-2 text-white"><span className="text-sm text-slate-400">$</span> {totalPot}</div>
+            </div>
+            <div className="p-4 space-y-3">
+              {potSegments.map((seg, idx) => (
+                <div key={idx} className="bg-slate-800 rounded-lg p-3 border border-slate-700">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm text-slate-300 font-bold flex items-center gap-2">
+                      {idx === 0 ? <ShieldCheck className="w-4 h-4 text-emerald-400"/> : <Layers className="w-4 h-4 text-blue-400"/>}
+                      {idx === 0 ? t.segment_main : `${t.segment_side} #${idx}`}
+                    </span>
+                    <span className="font-mono text-lg text-white">${seg.amount}</span>
+                  </div>
+                  <div className="flex gap-2">
+                     <button onClick={() => updateSegmentResult(idx, 'win')} className={`flex-1 py-1 rounded text-xs font-bold transition border ${seg.result === 'win' ? 'bg-emerald-600 border-emerald-500 text-white' : 'bg-slate-700 border-slate-600 text-slate-400 hover:bg-slate-600'}`}>{t.settle_win}</button>
+                     <button onClick={() => updateSegmentResult(idx, 'split')} className={`flex-1 py-1 rounded text-xs font-bold transition border ${seg.result === 'split' ? 'bg-blue-600 border-blue-500 text-white' : 'bg-slate-700 border-slate-600 text-slate-400 hover:bg-slate-600'}`}>{t.settle_split}</button>
+                     <button onClick={() => updateSegmentResult(idx, 'loss')} className={`flex-1 py-1 rounded text-xs font-bold transition border ${seg.result === 'loss' ? 'bg-red-900/50 border-red-800 text-red-200' : 'bg-slate-700 border-slate-600 text-slate-400 hover:bg-slate-600'}`}>{t.settle_loss}</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button onClick={confirmSettlement} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 text-center transition border-t border-emerald-500">{t.settle_confirm}</button>
           </div>
         )}
       </div>
