@@ -1,5 +1,5 @@
 // 1. 图标库 (从 index.html 的 importmap 加载)
-import { RefreshCw, Trophy, Users, Globe, Brain, Info, DollarSign, ArrowRight, Layers, HandMetal, AlertTriangle, CheckCircle, XCircle, Divide, Flame, Skull, Zap, RotateCcw, Settings, X, Coins, ShieldCheck, MousePointerClick, Flag, Lightbulb } from 'lucide-react';
+import { RefreshCw, Trophy, Users, Globe, Brain, Info, DollarSign, ArrowRight, Layers, HandMetal, AlertTriangle, CheckCircle, XCircle, Divide, Flame, Skull, Zap, RotateCcw, Settings, X, Coins, ShieldCheck, MousePointerClick, Flag, Lightbulb, CheckSquare } from 'lucide-react';
 
 // 2. 从全局变量中获取 React 功能 (关键：适配 Cloudflare Pages Zero-Build)
 const { useState, useEffect, useMemo } = React;
@@ -7,9 +7,9 @@ const { createRoot } = ReactDOM;
 
 /**
  * 德州扑克助手 Pro (Texas Hold'em Advisor Pro)
- * Version 4.1 Update:
- * 1. Added Pre-flop specific analysis (起手牌分析).
- * 2. Identifies Premium Pairs, Suited Connectors, Set Mining, etc.
+ * Version 4.2 Update:
+ * 1. Added "One-Click Call" shortcut (一键跟注).
+ * 2. Intelligent logic to handle Call vs All-In based on stack size.
  */
 
 // --- 常量定义 ---
@@ -133,6 +133,10 @@ const TEXTS = {
     restart_hand: '开始下一手牌',
     btn_allin: 'ALL-IN',
     btn_fold: '弃牌 (Fold)',
+    // New Translations for Call Button
+    btn_call: '跟注 (Call)',
+    btn_check: '过牌 (Check)',
+    btn_call_allin: '全压 (Call/All-In)',
     rebuy: '补充筹码',
     deck_count: '牌副数 (Decks)',
     deck_info: '标准德扑为1副。多副牌会降低阻断效应。',
@@ -210,6 +214,9 @@ const TEXTS = {
     restart_hand: 'Next Hand',
     btn_allin: 'ALL-IN',
     btn_fold: 'Fold',
+    btn_call: 'Call',
+    btn_check: 'Check',
+    btn_call_allin: 'Call/All-In',
     rebuy: 'Rebuy',
     deck_count: 'Deck Count',
     deck_info: 'Standard is 1. More decks dilute card removal.',
@@ -269,7 +276,7 @@ const evaluateHand = (cards) => {
   return ranks[0];
 };
 
-// --- 核心分析函数 (Updated for Pre-flop) ---
+// --- 核心分析函数 ---
 const analyzeHandFeatures = (heroCards, communityCards) => {
   if (!heroCards[0] || !heroCards[1]) return null;
   
@@ -432,6 +439,20 @@ function TexasHoldemAdvisor() {
   const currentStack = heroStack - heroBet; 
   
   const spr = currentStack > 0 && totalPot > 0 ? (currentStack / totalPot).toFixed(2) : '∞';
+
+  // --- Logic for Call Button ---
+  const maxOpponentBet = Math.max(0, ...players.map(p => p.bet));
+  const amountToCall = Math.max(0, maxOpponentBet); // The absolute amount Hero needs to have in 'bet' input
+  const isCallAction = amountToCall > heroBet; // Need to put more money?
+  
+  // Logic: Can we afford the call?
+  // If maxOpponentBet > heroStack (Total Stack), then we can only go All-In (set bet to heroStack)
+  const safeCallAmount = Math.min(amountToCall, heroStack);
+  const isCallAllIn = safeCallAmount >= heroStack;
+  
+  const handleCall = () => {
+    setHeroBet(safeCallAmount);
+  };
 
   // --- Actions ---
 
@@ -981,6 +1002,28 @@ function TexasHoldemAdvisor() {
                         >
                            <Flag className="w-3 h-3" /> {t.btn_fold}
                         </button>
+
+                        {/* --- One Click Call Button --- */}
+                        <button 
+                           onClick={handleCall}
+                           disabled={heroStack === 0}
+                           className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded shadow-sm transition font-bold tracking-wider
+                             ${isCallAllIn 
+                                ? 'bg-red-800 text-red-100 hover:bg-red-700 border border-red-600 animate-pulse' // All-In Style
+                                : 'bg-blue-600 text-white hover:bg-blue-500 border border-blue-500' // Call Style
+                             }
+                             ${heroStack === 0 ? 'opacity-50 cursor-not-allowed' : ''}
+                           `}
+                        >
+                           {isCallAction ? (
+                              isCallAllIn 
+                                ? <><Zap className="w-3 h-3 fill-current"/> {t.btn_call_allin} ${safeCallAmount}</>
+                                : <><CheckSquare className="w-3 h-3"/> {t.btn_call} ${safeCallAmount}</>
+                           ) : (
+                              <><CheckCircle className="w-3 h-3"/> {t.btn_check}</>
+                           )}
+                        </button>
+
                         <button 
                           onClick={() => handleHeroBetChange(heroStack)} 
                           disabled={heroStack === 0}
