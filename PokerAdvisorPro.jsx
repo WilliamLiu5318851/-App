@@ -1,20 +1,20 @@
-// 1. 图标库 (从 index.html 的 importmap 加载)
+// ⚠️ 核心修復：不再使用 import 導入 React，而是使用 index.html 中加載的全局變量
+// 這樣可以解決 "createRoot is not defined" 的問題
+
+// 1. 圖標庫仍然使用 import (因為 index.html 的 importmap 中定義了它)
 import { RefreshCw, Trophy, Users, Globe, Brain, Info, DollarSign, ArrowRight, Layers, HandMetal, AlertTriangle, CheckCircle, XCircle, Divide, Flame, Skull, Zap, RotateCcw, Settings, X, Coins, ShieldCheck, MousePointerClick, Flag } from 'lucide-react';
 
-// 2. 从全局变量中获取 React 功能
+// 2. 從全局變量中獲取 React 功能
 const { useState, useEffect, useMemo } = React;
 const { createRoot } = ReactDOM;
 
 /**
- * 德州扑克助手 Pro (Texas Hold'em Advisor Pro)
- * Version 3.9 Update:
- * 1. Implemented Auto-Advance Selection for Flop and Hero Hand.
- * - Selecting Flop card 1 auto-jumps to card 2, then card 3.
- * - Selecting Hero card 1 auto-jumps to card 2.
- * 2. Dynamic Card Selector Title: Shows which card is being selected (e.g., "Flop 2/3").
+ * 德州撲克助手 Pro (Texas Hold'em Advisor Pro)
+ * Version 3.5 Fix: 
+ * Adapted for Global React Mode (No build step required).
  */
 
-// --- 常量定义 ---
+// --- 常量定義 ---
 const SUITS = ['s', 'h', 'd', 'c']; 
 const RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A'];
 const RANK_VALUES = { '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, 'T': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14 };
@@ -22,81 +22,77 @@ const STREETS = ['Pre-flop', 'Flop', 'Turn', 'River'];
 
 const TEXTS = {
   zh: {
-    appTitle: '德州扑克智囊 Pro',
+    appTitle: '德州撲克智囊 Pro',
     heroHand: '我的手牌',
     communityCards: '公共牌',
-    calculate: '计算胜率 & 获取建议',
-    calculating: '模拟计算中...',
+    calculate: '計算勝率 & 獲取建議',
+    calculating: '模擬計算中...',
     reset: '新的一局',
-    settings: '设置',
-    potInfo: '底池追踪',
-    mainPot: '主底池 (前几轮)',
-    currentBets: '本轮死钱',
-    totalPot: '总底池',
-    heroStack: '我的筹码',
-    stackAfterBet: '下注后剩余',
-    spr: 'SPR (筹码底池比)',
-    strategy: '策略风格',
+    settings: '設置',
+    potInfo: '底池追蹤',
+    mainPot: '主底池 (前幾輪)',
+    currentBets: '本輪死錢',
+    totalPot: '總底池',
+    heroStack: '我的籌碼',
+    stackAfterBet: '下注後剩餘',
+    spr: 'SPR (籌碼底池比)',
+    strategy: '策略風格',
     conservative: '保守 (Tight)',
-    aggressive: '激进 (Aggressive)',
-    maniac: '诈唬/超激进 (Bluff)',
-    players: '对手动作',
+    aggressive: '激進 (Aggressive)',
+    maniac: '詐唬/超激進 (Bluff)',
+    players: '對手動作',
     active: '入局',
-    folded: '弃牌',
-    bet: '本轮下注',
-    equity: '真实胜率',
-    advice: '行动指南',
-    nextStreet: '收池 & 下一轮',
-    finishHand: '结算本局',
-    betSizing: '推荐加注额 (点击应用)',
-    potOdds: '底池赔率',
-    requiredEquity: '所需胜率',
-    advice_fold: '弃牌 (Fold)',
-    advice_check_fold: '过牌/弃牌 (Check/Fold)',
-    advice_check_call: '过牌/跟注 (Check/Call)',
+    folded: '棄牌',
+    bet: '本輪下注',
+    equity: '真實勝率',
+    advice: '行動指南',
+    nextStreet: '收池 & 下一輪',
+    finishHand: '結算本局',
+    betSizing: '推薦加注額 (點擊應用)',
+    potOdds: '底池賠率',
+    requiredEquity: '所需勝率',
+    advice_fold: '棄牌 (Fold)',
+    advice_check_fold: '過牌/棄牌 (Check/Fold)',
+    advice_check_call: '過牌/跟注 (Check/Call)',
     advice_call: '跟注 (Call)',
     advice_raise: '加注 (Raise)',
-    advice_raise_bluff: '诈唬加注 (Bluff Raise)',
-    advice_allin: '全压 (All-In)',
-    advice_allin_bluff: '全压诈唬 (All-In Bluff)',
-    reason_spr_low: 'SPR过低，您已套池(Committed)',
-    reason_value: '强牌价值下注',
-    reason_bluff_semi: '半诈唬：有听牌，打退对手',
-    reason_bluff_pure: '纯诈唬：扮演强牌，利用弃牌率',
-    reason_odds: '赔率合适，适合跟注听牌',
+    advice_raise_bluff: '詐唬加注 (Bluff Raise)',
+    advice_allin: '全壓 (All-In)',
+    advice_allin_bluff: '全壓詐唬 (All-In Bluff)',
+    reason_spr_low: 'SPR過低，您已套池(Committed)',
+    reason_value: '強牌價值下注',
+    reason_bluff_semi: '半詐唬：有聽牌，打退對手',
+    reason_bluff_pure: '純詐唬：扮演強牌，利用棄牌率',
+    reason_odds: '賠率合適，適合跟注聽牌',
     street_pre: '翻牌前',
     street_flop: '翻牌圈',
-    street_turn: '转牌圈',
+    street_turn: '轉牌圈',
     street_river: '河牌圈',
-    add_player: '添加对手',
+    add_player: '添加對手',
     bet_size_small: '小注 (1/3)',
     bet_size_med: '中注 (2/3)',
-    bet_size_large: '满池 (1.0)',
+    bet_size_large: '滿池 (1.0)',
     bet_size_over: '超池 (1.5x)',
-    settle_win: '赢',
-    settle_loss: '输',
+    settle_win: '贏',
+    settle_loss: '輸',
     settle_split: '平',
-    settle_title: '分池结算',
-    settle_confirm: '确认结算结果',
-    restart_hand: '开始下一手牌',
+    settle_title: '分池結算',
+    settle_confirm: '確認結算結果',
+    restart_hand: '開始下一手牌',
     btn_allin: 'ALL-IN',
-    btn_fold: '弃牌 (Fold)',
-    rebuy: '补充筹码',
-    deck_count: '牌副数 (Decks)',
-    deck_info: '标准德扑为1副。多副牌会降低阻断效应。',
-    game_settings: '游戏设置',
-    selectCard: '选择一张牌',
+    btn_fold: '棄牌 (Fold)',
+    rebuy: '補充籌碼',
+    deck_count: '牌副數 (Decks)',
+    deck_info: '標準德撲為1副。多副牌會降低阻斷效應。',
+    game_settings: '遊戲設置',
+    selectCard: '選擇一張牌',
     pot_segment: '池',
-    contestants: '参与人数',
-    net_change: '本局变动',
+    contestants: '參與人數',
+    net_change: '本局變動',
     segment_main: '主池 (Main)',
-    segment_side: '边池 (Side)',
-    buy_in_amount: '一手筹码 (Buy-in)',
-    buy_in_info: 'Rebuy 按钮的默认补充金额。',
-    selecting_flop: '选择翻牌 (Flop)',
-    selecting_turn: '选择转牌 (Turn)',
-    selecting_river: '选择河牌 (River)',
-    selecting_hero: '选择手牌'
+    segment_side: '邊池 (Side)',
+    buy_in_amount: '一手籌碼 (Buy-in)',
+    buy_in_info: 'Rebuy 按鈕的默認補充金額。'
   },
   en: {
     appTitle: 'Poker Advisor Pro',
@@ -169,11 +165,7 @@ const TEXTS = {
     segment_main: 'Main Pot',
     segment_side: 'Side Pot',
     buy_in_amount: 'Buy-in Amount',
-    buy_in_info: 'Default amount for Rebuy button.',
-    selecting_flop: 'Select Flop',
-    selecting_turn: 'Select Turn',
-    selecting_river: 'Select River',
-    selecting_hero: 'Select Hand'
+    buy_in_info: 'Default amount for Rebuy button.'
   }
 };
 
@@ -230,7 +222,7 @@ const CardIcon = ({ rank, suit, className = "" }) => {
 
 // --- Main Component ---
 
-export default function TexasHoldemAdvisor() {
+function TexasHoldemAdvisor() {
   const [lang, setLang] = useState('zh');
   const [strategy, setStrategy] = useState('conservative'); 
   const [showSettings, setShowSettings] = useState(false);
@@ -258,7 +250,7 @@ export default function TexasHoldemAdvisor() {
   
   const [result, setResult] = useState(null);
   const [isCalculating, setIsCalculating] = useState(false);
-  const [selectingFor, setSelectingFor] = useState(null); // { type: 'hero'|'board', index: number }
+  const [selectingFor, setSelectingFor] = useState(null);
   
   // Settlement State
   const [settlementMode, setSettlementMode] = useState(false);
@@ -543,37 +535,16 @@ export default function TexasHoldemAdvisor() {
         }
       }
 
-      // --- 核心修改：混合权重下注算法 (Hybrid Bet Sizing) ---
+      // --- 最新修正邏輯 (Bet Capping) ---
       if (adviceKey.includes('raise') || adviceKey.includes('allin')) {
-        const p = totalPot; // 底池
-        const s = heroStack; // 剩余筹码
-        
-        const cap = (val) => Math.min(val, s);
-
-        let smallBase, medBase, largeBase;
-
-        // 取 “基于底池的比例” 和 “基于筹码的开池比例” 中的较大者
-        if (strategy === 'maniac') {
-           // 疯鱼模式：底池倍率更高，或者直接开池 5% - 20% 筹码
-           smallBase = Math.max(p * 0.33, s * 0.05);
-           medBase   = Math.max(p * 0.66, s * 0.10);
-           largeBase = Math.max(p * 1.5,  s * 0.20); 
-        } else if (strategy === 'aggressive') {
-           // 激进模式：3% - 12% 筹码
-           smallBase = Math.max(p * 0.33, s * 0.03);
-           medBase   = Math.max(p * 0.66, s * 0.06);
-           largeBase = Math.max(p * 1.0,  s * 0.12);
-        } else {
-           // 保守模式：2% - 8% 筹码
-           smallBase = Math.max(p * 0.33, s * 0.02);
-           medBase   = Math.max(p * 0.66, s * 0.04);
-           largeBase = Math.max(p * 1.0,  s * 0.08);
-        }
+        const p = totalPot;
+        // 輔助函數：確保推薦下注不超過剩餘籌碼
+        const cap = (val) => Math.min(val, heroStack);
         
         betSizes = {
-          small: cap(Math.round(smallBase)),
-          med:   cap(Math.round(medBase)),
-          large: cap(Math.round(largeBase))
+          small: cap(Math.round(p * 0.33)),
+          med: cap(Math.round(p * 0.66)),
+          large: cap(Math.round(p * (isManiac ? 1.5 : 1.0)))
         };
       }
 
@@ -594,23 +565,10 @@ export default function TexasHoldemAdvisor() {
 
   const CardSelector = () => {
     if (!selectingFor) return null;
-
-    // Dynamic Title for Selector
-    let title = t.selectCard;
-    if (selectingFor.type === 'hero') title = `${t.selecting_hero} ${selectingFor.index + 1}/2`;
-    if (selectingFor.type === 'board') {
-        if (selectingFor.index < 3) title = `${t.selecting_flop} ${selectingFor.index + 1}/3`;
-        else if (selectingFor.index === 3) title = t.selecting_turn;
-        else title = t.selecting_river;
-    }
-
     return (
       <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => setSelectingFor(null)}>
         <div className="bg-slate-800 rounded-xl p-4 max-w-lg w-full max-h-[80vh] overflow-y-auto border border-slate-600 shadow-2xl" onClick={e => e.stopPropagation()}>
-          <h3 className="text-white font-bold mb-4 flex justify-between items-center">
-            <span>{title}</span>
-            <button onClick={() => setSelectingFor(null)} className="text-slate-400 hover:text-white"><X className="w-5 h-5"/></button>
-          </h3>
+          <h3 className="text-white font-bold mb-4">{t.selectCard}</h3>
           <div className="grid grid-cols-4 gap-2">
             {SUITS.map(suit => (
               <div key={suit} className="flex flex-col gap-2">
@@ -624,23 +582,12 @@ export default function TexasHoldemAdvisor() {
                       disabled={isTaken}
                       onClick={() => {
                         const card = { rank, suit };
-                        let nextState = null;
-
                         if (selectingFor.type === 'hero') {
-                          const h = [...heroHand];
-                          h[selectingFor.index] = card;
-                          setHeroHand(h);
-                          // Auto-advance Hero: 0 -> 1 -> Close
-                          if (selectingFor.index === 0) nextState = { type: 'hero', index: 1 };
+                          const h = [...heroHand]; h[selectingFor.index] = card; setHeroHand(h);
                         } else {
-                          const b = [...communityCards];
-                          b[selectingFor.index] = card;
-                          setCommunityCards(b);
-                          // Auto-advance Board: Flop 0->1->2->Close
-                          if (selectingFor.index < 2) nextState = { type: 'board', index: selectingFor.index + 1 };
+                          const b = [...communityCards]; b[selectingFor.index] = card; setCommunityCards(b);
                         }
-                        
-                        setSelectingFor(nextState);
+                        setSelectingFor(null);
                       }}
                       className={`p-1 rounded flex justify-center hover:bg-slate-700 ${isTaken ? 'opacity-20 cursor-not-allowed' : ''}`}
                     >
@@ -1039,15 +986,5 @@ export default function TexasHoldemAdvisor() {
   }
 }
 
-// ⚠️ 核心修复逻辑：Singleton Root Pattern (单例模式)
-// 检查 'root' 容器上是否已经绑定了 React Root
-const container = document.getElementById('root');
-
-if (container) {
-  // 如果容器上还没有 _reactRoot，创建一个并挂载
-  if (!container._reactRoot) {
-    container._reactRoot = createRoot(container);
-  }
-  // 复用已有的 Root 进行渲染
-  container._reactRoot.render(<TexasHoldemAdvisor />);
-}
+const root = createRoot(document.getElementById('root'));
+root.render(<TexasHoldemAdvisor />);
