@@ -1,10 +1,16 @@
+<<<<<<< HEAD
 // 1. 图标库
 import { RefreshCw, Trophy, Users, Globe, Brain, Info, DollarSign, ArrowRight, Layers, HandMetal, AlertTriangle, CheckCircle, XCircle, Divide, Flame, Skull, Zap, RotateCcw, Settings, X, Coins, ShieldCheck, MousePointerClick, Flag, Lightbulb, CheckSquare, Grid } from 'lucide-react';
+=======
+// 1. 圖標庫 (從 index.html 的 importmap 加載)
+import { RefreshCw, Trophy, Users, Globe, Brain, Info, DollarSign, ArrowRight, Layers, HandMetal, AlertTriangle, CheckCircle, XCircle, Divide, Flame, Skull, Zap, RotateCcw, Settings, X, Coins, ShieldCheck, MousePointerClick, Flag, Lightbulb, CheckSquare } from 'lucide-react';
+>>>>>>> parent of 83c450a (Update PokerAdvisorPro.jsx)
 
-// 2. 全局 React
+// 2. 從全局變量中獲取 React 功能
 const { useState, useEffect, useMemo } = React;
 const { createRoot } = ReactDOM;
 
+<<<<<<< HEAD
 // 3. 数据层 (带完整 Fallback)
 const { CONSTANTS, HAND_ANALYSIS_DEFINITIONS, TEXTURE_STRATEGIES, TEXTS } = window.PokerData || {
   CONSTANTS: { 
@@ -13,6 +19,11 @@ const { CONSTANTS, HAND_ANALYSIS_DEFINITIONS, TEXTURE_STRATEGIES, TEXTS } = wind
     RANK_VALUES: { '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, 'T': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14 },
     STREETS: ['Pre-flop', 'Flop', 'Turn', 'River']
   },
+=======
+// 3. 從 PokerData.js 獲取數據
+const { CONSTANTS, HAND_ANALYSIS_DEFINITIONS, TEXTS } = window.PokerData || {
+  CONSTANTS: { SUITS: [], RANKS: [], RANK_VALUES: {}, STREETS: [] },
+>>>>>>> parent of 83c450a (Update PokerAdvisorPro.jsx)
   HAND_ANALYSIS_DEFINITIONS: { zh: {}, en: {} },
   TEXTURE_STRATEGIES: {},
   TEXTS: { zh: {}, en: {} }
@@ -21,6 +32,7 @@ const { CONSTANTS, HAND_ANALYSIS_DEFINITIONS, TEXTURE_STRATEGIES, TEXTS } = wind
 const { SUITS, RANKS, RANK_VALUES, STREETS } = CONSTANTS;
 
 /**
+<<<<<<< HEAD
  * 德州扑克助手 Pro (Texas Hold'em Advisor Pro)
  * Version 5.0 Logic Upgrade:
  * 1. Implemented Board Texture Analysis (Rainbow, Two-Tone, Monotone, Paired).
@@ -54,12 +66,26 @@ const evaluateHand = (cards) => {
   const sfHigh = getStraightFlushHigh(cards);
   if (sfHigh > 0) return 8000000 + sfHigh;
 
+=======
+ * 德州撲克助手 Pro (Texas Hold'em Advisor Pro)
+ * Version 4.7 Fix:
+ * 1. Fixed Straight Flush detection bug caused by incorrect array sorting order (Ascending vs Descending).
+ * 2. Implemented a rigorous `isStraightFlush` check that filters cards by suit before checking for straights.
+ * 3. Ensures "Made Straight Flush" is correctly identified in the Hand Analysis label.
+ */
+
+// --- Poker Logic Helpers (Monte Carlo Engine - Unchanged & Correct) ---
+const evaluateHand = (cards) => {
+  if (!cards || cards.length < 5) return 0;
+>>>>>>> parent of 83c450a (Update PokerAdvisorPro.jsx)
   const sorted = [...cards].sort((a, b) => RANK_VALUES[b.rank] - RANK_VALUES[a.rank]);
   const ranks = sorted.map(c => RANK_VALUES[c.rank]);
+  const suits = sorted.map(c => c.suit);
   const counts = {};
   ranks.forEach(r => counts[r] = (counts[r] || 0) + 1);
   const countValues = Object.values(counts);
   
+<<<<<<< HEAD
   if (countValues.includes(4)) {
       const quadRank = parseInt(Object.keys(counts).find(k => counts[k] === 4));
       const kicker = ranks.find(r => r !== quadRank);
@@ -82,10 +108,45 @@ const evaluateHand = (cards) => {
 
   const uniqueRanks = [...new Set(ranks)];
   if (uniqueRanks.includes(14)) uniqueRanks.push(1); 
+=======
+  const suitCounts = {};
+  suits.forEach(s => suitCounts[s] = (suitCounts[s] || 0) + 1);
+  let flushSuit = Object.keys(suitCounts).find(s => suitCounts[s] >= 5);
+  let isFlush = !!flushSuit;
+  let flushRanks = isFlush ? sorted.filter(c => c.suit === flushSuit).map(c => RANK_VALUES[c.rank]) : [];
+
+  const uniqueRanks = Array.from(new Set(ranks)).sort((a, b) => b - a);
+  let straightHigh = 0;
+>>>>>>> parent of 83c450a (Update PokerAdvisorPro.jsx)
   for (let i = 0; i <= uniqueRanks.length - 5; i++) {
-      if (uniqueRanks[i] - uniqueRanks[i+4] === 4) return 4000000 + uniqueRanks[i];
+    const slice = uniqueRanks.slice(i, i + 5);
+    if (slice[0] - slice[4] === 4) { straightHigh = slice[0]; break; }
+  }
+  if (!straightHigh && uniqueRanks.includes(14) && uniqueRanks.includes(2) && uniqueRanks.includes(3) && uniqueRanks.includes(4) && uniqueRanks.includes(5)) straightHigh = 5;
+
+  // Rigorous SF Check for MC
+  let isStraightFlush = false;
+  if (isFlush) {
+      // Check straight only within flush ranks
+      const uniqueFlushRanks = Array.from(new Set(flushRanks)).sort((a, b) => b - a);
+      for (let i = 0; i <= uniqueFlushRanks.length - 5; i++) {
+          if (uniqueFlushRanks[i] - uniqueFlushRanks[i+4] === 4) {
+              isStraightFlush = true;
+              straightHigh = uniqueFlushRanks[i];
+              break;
+          }
+      }
+      if (!isStraightFlush && uniqueFlushRanks.includes(14) && uniqueFlushRanks.includes(5)) {
+          // Wheel SF
+          const wheelParts = [14, 5, 4, 3, 2];
+          if (wheelParts.every(r => uniqueFlushRanks.includes(r))) {
+              isStraightFlush = true;
+              straightHigh = 5;
+          }
+      }
   }
 
+<<<<<<< HEAD
   if (countValues.includes(3)) return 3000000 + parseInt(Object.keys(counts).find(k => counts[k] === 3));
   if (countValues.filter(c => c === 2).length >= 2) return 2000000; 
   if (countValues.includes(2)) return 1000000 + parseInt(Object.keys(counts).find(k => counts[k] === 2));
@@ -125,6 +186,20 @@ const analyzeBoardTexture = (communityCards) => {
 };
 
 // --- 核心分析函数 (UI 显示逻辑) ---
+=======
+  if (isStraightFlush) return 8000000 + straightHigh;
+  if (countValues.includes(4)) return 7000000;
+  if (countValues.includes(3) && countValues.includes(2)) return 6000000;
+  if (isFlush) return 5000000 + flushRanks[0];
+  if (straightHigh) return 4000000 + straightHigh;
+  if (countValues.includes(3)) return 3000000;
+  if (countValues.filter(c => c === 2).length >= 2) return 2000000;
+  if (countValues.includes(2)) return 1000000;
+  return ranks[0];
+};
+
+// --- 核心分析函數 (UI Label Logic) ---
+>>>>>>> parent of 83c450a (Update PokerAdvisorPro.jsx)
 const analyzeHandFeatures = (heroCards, communityCards) => {
   if (!heroCards[0] || !heroCards[1]) return null;
   
@@ -135,9 +210,14 @@ const analyzeHandFeatures = (heroCards, communityCards) => {
   const isSuited = heroCards[0].suit === heroCards[1].suit;
   const isPair = h1 === h2;
 
+<<<<<<< HEAD
   const board = communityCards.filter(Boolean);
   
   // Pre-flop
+=======
+  // === 1. Pre-flop Analysis ===
+  const board = communityCards.filter(Boolean);
+>>>>>>> parent of 83c450a (Update PokerAdvisorPro.jsx)
   if (board.length === 0) {
       if (isPair) {
           if (h1 >= 12) return "pre_monster_pair";
@@ -161,6 +241,7 @@ const analyzeHandFeatures = (heroCards, communityCards) => {
   const isRiver = board.length === 5;
   const allCards = [...heroCards, ...board];
   
+<<<<<<< HEAD
   const sfHigh = getStraightFlushHigh(allCards);
   if (sfHigh > 0) return "made_straight_flush";
 
@@ -173,25 +254,82 @@ const analyzeHandFeatures = (heroCards, communityCards) => {
   allCards.forEach(c => suits[c.suit] = (suits[c.suit] || 0) + 1);
   const flushSuitMade = Object.keys(suits).find(s => suits[s] >= 5);
 
+=======
+  // Basic Stats
+  const suits = {};
+  const ranks = [];
+  allCards.forEach(c => {
+    suits[c.suit] = (suits[c.suit] || 0) + 1;
+    ranks.push(RANK_VALUES[c.rank]);
+  });
+  
+  // FIX: Sort Descending (High to Low) for correct straight math
+  ranks.sort((a, b) => b - a);
+  const uniqueRanks = [...new Set(ranks)];
+  
+  const boardRanks = board.map(c => RANK_VALUES[c.rank]).sort((a,b)=>b-a);
+  const maxBoardRank = boardRanks[0];
+
+  const rankCounts = {};
+  ranks.forEach(r => rankCounts[r] = (rankCounts[r] || 0) + 1);
+  const countsArr = Object.values(rankCounts);
+  
+  // Flush Check
+  const flushSuitMade = Object.keys(suits).find(s => suits[s] >= 5);
+  
+  // Straight Check
+>>>>>>> parent of 83c450a (Update PokerAdvisorPro.jsx)
   let straightHigh = 0;
+  // Handle Wheel (A-2-3-4-5) logic for Straight
   let checkRanks = [...uniqueRanks];
-  if (uniqueRanks.includes(14)) checkRanks.push(1); 
+  if (uniqueRanks.includes(14)) checkRanks.push(1); // Add Ace as 1 at the end
   
   for (let i = 0; i <= checkRanks.length - 5; i++) {
-    if (checkRanks[i] - checkRanks[i+4] === 4) { 
-        straightHigh = checkRanks[i]; 
+    // Current window
+    const slice = checkRanks.slice(i, i + 5);
+    // Since we are Descending: slice[0] (High) - slice[4] (Low) === 4
+    if (slice[0] - slice[4] === 4) { 
+        straightHigh = slice[0]; 
         break; 
     }
   }
 
+<<<<<<< HEAD
+=======
+  // --- Priority Level 1: Monsters & Strong Made Hands ---
+  
+  // 1. Straight Flush Check (Rigorous)
+  if (flushSuitMade) {
+      const flushCards = allCards.filter(c => c.suit === flushSuitMade)
+                                 .map(c => RANK_VALUES[c.rank])
+                                 .sort((a, b) => b - a);
+      const uniqueFlushRanks = [...new Set(flushCards)];
+      let sfHigh = 0;
+      
+      // Standard SF
+      for (let i = 0; i <= uniqueFlushRanks.length - 5; i++) {
+         if (uniqueFlushRanks[i] - uniqueFlushRanks[i+4] === 4) { sfHigh = uniqueFlushRanks[i]; break; }
+      }
+      // Wheel SF
+      if (!sfHigh && uniqueFlushRanks.includes(14) && uniqueFlushRanks.includes(2)) {
+          const wheel = [14, 5, 4, 3, 2];
+          if (wheel.every(r => uniqueFlushRanks.includes(r))) sfHigh = 5;
+      }
+
+      if (sfHigh) return "made_straight_flush";
+  }
+
+  const hasTripsTotal = countsArr.includes(3);
+>>>>>>> parent of 83c450a (Update PokerAdvisorPro.jsx)
   const hasQuads = countsArr.includes(4);
-  const hasFullHouse = (countsArr.includes(3) && countsArr.includes(2)) || (countsArr.filter(c => c >= 3).length >= 2);
+  const hasFullHouse = (hasTripsTotal && countsArr.includes(2)) || (countsArr.filter(c => c >= 3).length >= 2);
 
   if (hasQuads) return "made_quads";
   if (hasFullHouse) return "made_full_house";
   if (flushSuitMade) return "made_flush";
   if (straightHigh) return "made_straight";
   
+  // Hero Specific Trips
   const heroRankCounts = { [h1_rank]: 0, [h2_rank]: 0 };
   allCards.forEach(c => {
     const r = RANK_VALUES[c.rank];
@@ -201,6 +339,10 @@ const analyzeHandFeatures = (heroCards, communityCards) => {
   const hitCount = Math.max(heroRankCounts[h1_rank], heroRankCounts[h2_rank]);
   if (hitCount >= 3) return "monster"; 
 
+<<<<<<< HEAD
+=======
+  // --- Priority Level 2: Draws ---
+>>>>>>> parent of 83c450a (Update PokerAdvisorPro.jsx)
   if (!isRiver) {
     const fdSuit = Object.keys(suits).find(s => suits[s] === 4);
     let flushDrawType = null;
@@ -210,14 +352,30 @@ const analyzeHandFeatures = (heroCards, communityCards) => {
     }
 
     let straightDrawType = null;
+    // Straight Draw Detection (simplified for advisor text)
+    // We check uniqueRanks (descending)
+    // If we have 4 cards within a span of 5 (Gutshot) or 4 (OESD)
+    // Wheel Draw logic: Ace is 14. We need to check low end.
     let drawRanks = [...uniqueRanks];
-    if (uniqueRanks.includes(14)) drawRanks.push(1);
+    if (uniqueRanks.includes(14)) drawRanks.push(1); // Ace as low
 
+    // Simple window scan for draws
+    // OESD: 4 consecutive cards (e.g., 5,6,7,8 -> gap 3)
+    // Gutshot: 4 cards with gap 4 (e.g., 5,6,8,9)
     for (let i = 0; i <= drawRanks.length - 4; i++) {
         const window = drawRanks.slice(i, i + 4);
+<<<<<<< HEAD
         const span = window[0] - window[window.length - 1];
         if (span <= 4) {
             if (span === 3) {
+=======
+        const span = window[0] - window[window.length - 1]; // Descending: High - Low
+        
+        if (span <= 4) {
+            if (span === 3) {
+                // 4 cards in a row
+                // Special case: A-2-3-4 (1 is low) -> only 5 helps -> Gutshot
+>>>>>>> parent of 83c450a (Update PokerAdvisorPro.jsx)
                 if (window.includes(1)) straightDrawType = "straight_draw_gutshot"; 
                 else straightDrawType = "straight_draw_oesd";
             } else {
@@ -235,9 +393,13 @@ const analyzeHandFeatures = (heroCards, communityCards) => {
     if (straightDrawType) return straightDrawType;
   }
 
+<<<<<<< HEAD
   const boardRanks = board.map(c => RANK_VALUES[c.rank]).sort((a,b)=>b-a);
   const maxBoardRank = boardRanks[0];
   
+=======
+  // --- Priority Level 3: Pairs ---
+>>>>>>> parent of 83c450a (Update PokerAdvisorPro.jsx)
   if (hitCount === 2) {
     if (isPair) {
       return h1 > maxBoardRank ? "overpair" : (h1 > boardRanks[0] ? "top_pair" : "pocket_pair_below"); 
@@ -532,6 +694,10 @@ function TexasHoldemAdvisor() {
         else { adviceKey = 'advice_fold'; }
       }
 
+<<<<<<< HEAD
+=======
+      // Hybrid Bet Sizing
+>>>>>>> parent of 83c450a (Update PokerAdvisorPro.jsx)
       if (adviceKey.includes('raise') || adviceKey.includes('allin')) {
         const p = totalPot;
         const s = heroStack;
@@ -553,7 +719,11 @@ function TexasHoldemAdvisor() {
         betSizes = { small: cap(Math.round(smallBase)), med: cap(Math.round(medBase)), large: cap(Math.round(largeBase)) };
       }
 
+<<<<<<< HEAD
       // --- 深度分析集成 ---
+=======
+      // --- Integration: Hand Analysis ---
+>>>>>>> parent of 83c450a (Update PokerAdvisorPro.jsx)
       const analysisKey = analyzeHandFeatures(heroHand, communityCards);
       const textureKey = analyzeBoardTexture(communityCards); // New: Board Texture
       
@@ -602,6 +772,10 @@ function TexasHoldemAdvisor() {
 
   const CardSelector = () => {
     if (!selectingFor) return null;
+<<<<<<< HEAD
+=======
+
+>>>>>>> parent of 83c450a (Update PokerAdvisorPro.jsx)
     let title = t.selectCard;
     if (selectingFor.type === 'hero') title = `${t.selecting_hero} ${selectingFor.index + 1}/2`;
     if (selectingFor.type === 'board') {
@@ -822,6 +996,7 @@ function TexasHoldemAdvisor() {
           <div className={`border rounded-xl overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500 ${result.isBluff ? 'bg-purple-900/20 border-purple-500/50' : 'bg-slate-900 border-slate-700'}`}>
              <div className="p-4 bg-slate-800/50 border-b border-slate-800 flex justify-between items-center">
                 <div>
+<<<<<<< HEAD
                    <h2 className={`text-2xl font-bold ${result.isBluff ? 'text-purple-400 animate-pulse' : result.advice.includes('Fold') ? 'text-red-400' : 'text-emerald-400'}`}>{result.advice}</h2>
                    <div className="flex flex-wrap gap-2 my-1">
                      {result.handTypeLabel && (
@@ -836,6 +1011,21 @@ function TexasHoldemAdvisor() {
                      )}
                    </div>
                    <p className="text-xs text-slate-400 mt-1 whitespace-pre-wrap">{result.reason}</p>
+=======
+                   <h2 className={`text-2xl font-bold ${
+                     result.isBluff ? 'text-purple-400 animate-pulse' :
+                     result.advice.includes('Fold') ? 'text-red-400' : 'text-emerald-400'
+                   }`}>{result.advice}</h2>
+                   
+                   {/* --- 位置 D: 顯示牌型分析結果 --- */}
+                   {result.handTypeLabel && (
+                     <div className="inline-block bg-slate-700 text-blue-200 text-xs px-2 py-0.5 rounded my-1 border border-blue-500/30">
+                       <span className="flex items-center gap-1"><Lightbulb className="w-3 h-3"/> {result.handTypeLabel}</span>
+                     </div>
+                   )}
+
+                   <p className="text-xs text-slate-400 mt-1">{result.reason}</p>
+>>>>>>> parent of 83c450a (Update PokerAdvisorPro.jsx)
                 </div>
                 <div className="text-right">
                    <div className="text-3xl font-bold text-white">{result.equity}%</div>
@@ -890,6 +1080,10 @@ function TexasHoldemAdvisor() {
   function handleCardClick(type, index) { setSelectingFor({ type, index }); }
 }
 
+<<<<<<< HEAD
+=======
+// ⚠️ 核心修復邏輯：Singleton Root Pattern (單例模式)
+>>>>>>> parent of 83c450a (Update PokerAdvisorPro.jsx)
 const container = document.getElementById('root');
 if (container) {
   if (!container._reactRoot) container._reactRoot = createRoot(container);
