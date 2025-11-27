@@ -56,7 +56,10 @@
         });
     </script>
 
-    <!-- 5. 加载你的 JSX 文件 -->
+    <!-- 5. 数据层 (Data Layer) - 必须在 JSX 之前加载 -->
+    <script src="./PokerData.js"></script>
+
+    <!-- 6. 核心逻辑 (Logic Layer) -->
     <script type="text/babel" data-type="module" src="./PokerAdvisorPro.jsx"></script>
 </body>
 </html>
