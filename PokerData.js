@@ -1,223 +1,238 @@
 /**
- * Poker Advisor Pro - Data Layer (v5.0 Simplified Chinese)
- * 包含了更细分、更具体的战术建议库。
+ * Poker Advisor Pro - Data Layer (v6.0 Theoretical Architecture)
+ * 基于《德州扑克牌局分析与数据》文档构建。
+ * 包含：组合学矩阵、GTO范围分层、牌面纹理策略、精准权益表。
  */
 
 window.PokerData = {};
 
-// --- 常量定义 (Constants) ---
+// --- 1. 基础常量定义 (Constants) ---
 window.PokerData.CONSTANTS = {
   SUITS: ['s', 'h', 'd', 'c'],
   RANKS: ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A'],
   RANK_VALUES: { '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, 'T': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14 },
-  STREETS: ['Pre-flop', 'Flop', 'Turn', 'River']
+  STREETS: ['Pre-flop', 'Flop', 'Turn', 'River'],
+  // 位置定义 (Doc 2.3)
+  POSITIONS: ['UTG', 'MP', 'CO', 'BTN', 'SB', 'BB']
 };
 
-// --- 手牌分析建议数据集 (Hand Analysis Definitions) ---
-// 这里定义了针对具体牌型（如顶对、听牌、怪兽牌）的战术建议
+// --- 2. 听牌权益速查表 (Draw Equity Reference - Doc 6.2) ---
+// 用于修正 "4-2法则" 的偏差，提供精确到小数点的胜率
+window.PokerData.DRAW_ODDS = {
+  gutshot: { outs: 4, flop_turn: 8.5, turn_river: 8.7, all_in: 16.5, label: "卡顺 (Gutshot)" },
+  overcards: { outs: 6, flop_turn: 12.8, turn_river: 13.0, all_in: 24.1, label: "两高张 (Overcards)" },
+  oesd: { outs: 8, flop_turn: 17.0, turn_river: 17.4, all_in: 31.5, label: "两头顺 (OESD)" },
+  flush_draw: { outs: 9, flop_turn: 19.1, turn_river: 19.6, all_in: 35.0, label: "同花听牌 (Flush Draw)" },
+  gutshot_flush: { outs: 12, flop_turn: 25.5, turn_river: 26.1, all_in: 45.0, label: "卡顺+同花 (Combo Draw)" },
+  monster_draw: { outs: 15, flop_turn: 31.9, turn_river: 32.6, all_in: 54.1, label: "超级听牌 (Monster Draw)" }
+};
+
+// --- 3. 牌面纹理策略表 (Texture Strategies - Doc 6.3) ---
+// 用于指导翻牌圈的 C-bet 频率和尺度
+window.PokerData.TEXTURE_STRATEGIES = {
+  TEX_RAINBOW_DRY: {
+    name: "彩虹不连张 (Rainbow Dry)",
+    freq: "高频 (70%+)",
+    sizing: "小注 (33% Pot)",
+    desc: "干燥牌面，很少有听牌。极度利好激进者(Aggressor)，建议高频小注持续下注。"
+  },
+  TEX_TWO_TONE: {
+    name: "双色牌面 (Two-Tone)",
+    freq: "中频 (45-60%)",
+    sizing: "中/大注 (66% Pot)",
+    desc: "牌面潮湿，存在同花听牌。需要更大的注码来保护手牌权益，拒绝免费看牌。"
+  },
+  TEX_MONOTONE: {
+    name: "单色牌面 (Monotone)",
+    freq: "低频 (30-40%)",
+    sizing: "小注 (25-33% Pot)",
+    desc: "极度潮湿！天花可能存在。权益分布紧缩，顶级对子价值缩水，建议控池防守。"
+  },
+  TEX_PAIRED: {
+    name: "公对牌面 (Paired)",
+    freq: "极高频 (80%+)",
+    sizing: "极小注 (25% Pot)",
+    desc: "极度干燥，很难有人击中。适合用全范围进行高频小注诈唬。"
+  },
+  TEX_CONNECTED: {
+    name: "连张牌面 (Connected)",
+    freq: "低频 (35-45%)",
+    sizing: "重注 (75%+ Pot)",
+    desc: "顺子面(如9-8-7)。坚果优势通常在防守方(BB)，激进者应谨慎行事或使用两极化大注。"
+  }
+};
+
+// --- 4. 手牌分析与建议库 (Hand Analysis Definitions - Doc 6.1 & 5.1) ---
 window.PokerData.HAND_ANALYSIS_DEFINITIONS = {
   zh: {
-    // === Pre-flop (翻牌前) ===
-    
-    // 1. 口袋对子 (Pocket Pairs)
+    // === Pre-flop: 起手牌矩阵 (基于 Doc 6.1 G1-G6 分类) ===
     pre_monster_pair: { 
-        label: "超级对子 (AA/KK/QQ)", 
-        advice: "加注/4-Bet (造大底池)", 
-        reason: "起手巅峰牌力！不要慢打，除非对手极其激进。目标是在翻牌前就建立巨大底池，隔离对手。" 
+        label: "G1: 超级对子 (Premium Pair)", 
+        advice: "加注/4-Bet (价值)", 
+        reason: "AA/KK/QQ。处于起手牌金字塔顶端(Top 1.4%)。翻前胜率77%-85%。目标：造大底池，隔离对手。" 
+    },
+    pre_premium_high: { 
+        label: "G2: 核心高牌 (Strong Linear)", 
+        advice: "加注/3-Bet (价值/压制)", 
+        reason: "AKs/AKo/AQs/JJ。强线性范围，压制大多数起手牌。击中顶对通常具有踢脚优势(Domination)。" 
     },
     pre_strong_pair: { 
-        label: "强对子 (JJ/TT/99)", 
-        advice: "加注/跟注 (小心高牌)", 
-        reason: "有摊牌价值，但很怕翻出A/K/Q。如果翻前遭遇强烈反击(4-Bet)，可以考虑弃牌。" 
+        label: "G3/G4: 中强对子 (TT-77)", 
+        advice: "加注/跟注 (混合)", 
+        reason: "有摊牌价值，但惧怕高张。主要价值在于阻断牌效应和翻牌后击中暗三条(Set Mining, 11.8%概率)。" 
     },
-    pre_small_pair: { 
-        label: "小对子 (22-88)", 
-        advice: "投机/埋伏 (Set Mining)", 
-        reason: "目标只有一个：中暗三条(Set)。如果赔率便宜(20倍以上筹码深度)就看牌，没中就跑，中了就清空对手。" 
-    },
-
-    // 2. 强力高牌 (Broadways & Premiums)
-    pre_premium_high: { 
-        label: "核心高牌 (AK/AQ)", 
-        advice: "加注/价值 (强势开局)", 
-        reason: "这不是听牌，这是压制牌。击中顶对通常是顶踢脚(TPTK)。即使没中，也有足够的胜率去半诈唬。" 
-    },
-    pre_broadway: { 
-        label: "广播道 (KJ/QJ/AT)", 
-        advice: "谨慎进攻 (注意踢脚)", 
-        reason: "容易被主导(Dominated)的牌。如果你击中顶对但对手推All-in，你的踢脚可能不够大，小心陷阱。" 
-    },
-
-    // 3. 投机牌 (Speculative Hands)
     pre_suited_ace: { 
-        label: "同花A (A2s-A9s)", 
-        advice: "半诈唬/阻断 (Nut Potential)", 
-        reason: "最强的投机牌！A是阻断牌，且能听坚果同花。非常适合用来做3-Bet诈唬，或者在多人底池中看花。" 
+        label: "G6: 同花A (Wheel Aces)", 
+        advice: "半诈唬/平衡 (Bluff Candidate)", 
+        reason: "A2s-A5s。具有极佳的板面覆盖性(Board Coverage)。A是坚果阻断牌，且能听顺子和坚果花，是完美的3-Bet诈唬牌。" 
     },
     pre_suited_connector: { 
-        label: "同花连张 (65s-JTs)", 
-        advice: "投机/跟注 (由守转攻)", 
-        reason: "怪兽杀手！具有极强的成顺/成花隐蔽性。适合深筹码、有位置时入局，击中后潜在赔率巨大。" 
+        label: "G5: 同花连张 (Speculative)", 
+        advice: "投机/跟注 (深筹码)", 
+        reason: "T9s/98s/87s。怪兽杀手。虽然翻前胜率只有40%左右，但击中后隐含赔率巨大。适合在有位置且筹码深时入局。" 
     },
-    pre_suited_gapper: { 
-        label: "同花隔张 (T8s/97s)", 
-        advice: "后位偷盲/弃牌", 
-        reason: "比连张稍弱，但在后位(Button/CO)依然可以玩。如果前面有人加注，通常建议弃牌。" 
+    pre_broadway: { 
+        label: "广播道 (Broadways)", 
+        advice: "谨慎进攻", 
+        reason: "KJ/QJ/AT。容易形成顶对，但也容易被AK/AQ压制。在面对紧的对手时要小心踢脚问题(Kicker Problem)。" 
     },
-    
-    // 4. 垃圾牌
     pre_trash: { 
         label: "杂牌 (Trash)", 
         advice: "弃牌 (Fold)", 
-        reason: "不要浪费筹码。长期来看，玩这种牌是亏损的根源。耐心等待，不要因为无聊而入池。" 
+        reason: "GTO策略会放弃约70%的起手牌。长期来看，玩这些牌是负EV行为。保持纪律性。" 
     },
 
-    // === Post-flop (翻牌后) ===
+    // === Post-flop: 成牌与听牌 (基于 Doc 3.2 & 4.1) ===
     
-    // 1. 怪兽成牌 (Monsters) - 几乎无敌
+    // Monsters
     made_straight_flush: { 
         label: "同花顺 (Straight Flush)", 
         advice: "慢打/诱敌 (绝对坚果)", 
-        reason: "你已经无敌了。现在唯一的问题是：怎么演得像在诈唬，让对手把钱全送给你？" 
+        reason: "扑克中的皇帝！你已经无敌。现在的目标是利用反向阻断原理，引诱对手诈唬或支付。" 
     },
     made_quads: { 
         label: "四条 (Quads)", 
         advice: "慢打 (Slowplay)", 
-        reason: "不需要保护手牌，因为对手几乎不可能反超。给对手一点希望，让他们中牌或诈唬。" 
+        reason: "极小概率输牌(0.24%击中率)。不需要保护。给对手发牌，让他们中第二好的牌。" 
     },
     made_full_house: { 
         label: "葫芦 (Full House)", 
-        advice: "价值下注 (Value Bet)", 
-        reason: "极强的成牌。除非牌面有更大的公对子，否则你几乎稳赢。开始建立底池吧。" 
+        advice: "价值下注 (Value)", 
+        reason: "极强成牌。除非公牌有更大的对子，否则稳赢。开始建立底池，准备全压。" 
     },
     made_flush: { 
         label: "同花 (Flush)", 
         advice: "价值/防守", 
-        reason: "你已经完成了同花！注意：如果牌面有公对，对手可能有葫芦；如果是A花，你是无敌的。" 
+        reason: "已成同花！注意：公牌若有对子，对手可能有葫芦。如果你是A花(坚果)，可以更激进。" 
     },
     made_straight: { 
         label: "顺子 (Straight)", 
-        advice: "积极进攻 (Aggressive)", 
-        reason: "顺子是大牌，很容易被低估。在同花面要小心，否则请积极下注，不要让听牌便宜看牌。" 
+        advice: "积极进攻", 
+        reason: "顺子是大牌。在单色面或公对面要小心，否则请积极下注，拒绝听牌的权益实现。" 
     },
     monster: { 
-        label: "三条 (Trips/Set)", 
+        label: "三条 (Set/Trips)", 
         advice: "强力价值 (Fast Play)", 
-        reason: "暗三条(Set)极其隐蔽，是赢取大底池的最佳牌型。除非牌面极其湿润，否则应该快打。" 
+        reason: "暗三条极隐蔽。在湿润牌面必须快打，防止被听牌反超；干燥面可慢打。" 
     },
     
-    // 2. 对子 (Pairs) - 需要技巧
+    // Pairs
     top_pair: { 
         label: "顶对 (Top Pair)", 
-        advice: "价值下注/控池", 
-        reason: "你有顶对，通常领先。如果在干燥面，可以下注价值；在湿润面(很多听牌)，要注意保护手牌。" 
-    },
-    overpair: { 
-        label: "超对 (Overpair)", 
-        advice: "强势价值", 
-        reason: "你的口袋对子比公牌都大。这通常是很好的牌，但要警惕对手击中暗三条或两对。" 
+        advice: "价值/控池", 
+        reason: "通常领先。干燥面下注获取价值；湿润面下注进行保护。注意踢脚大小。" 
     },
     middle_pair: { 
         label: "中对 (Middle Pair)", 
-        advice: "抓诈唬/过牌 (Bluff Catch)", 
-        reason: "具有摊牌价值，但很难承受大注。适合过牌控池，或者用来抓对手的纯诈唬。" 
+        advice: "抓诈唬 (Bluff Catch)", 
+        reason: "具有摊牌价值，但难以承受大注。适合过牌控池，利用MDF原理抓对手纯诈唬。" 
     },
     bottom_pair: { 
         label: "底对 (Bottom Pair)", 
-        advice: "过牌/谨慎摊牌", 
-        reason: "牌力较弱，只能赢诈唬。如果有任何进攻动作，通常建议弃牌。" 
+        advice: "谨慎摊牌/弃牌", 
+        reason: "牌力较弱。除非对手极度激进且你在有利位置，否则面对强攻建议弃牌。" 
     },
     pocket_pair_below: { 
         label: "小口袋对 (Underpair)", 
         advice: "过牌/弃牌", 
-        reason: "你的对子小于公牌，极易被压制(Counterfeited)或被诈唬。几乎没有价值。" 
+        reason: "你的对子小于公牌，已被压制(Counterfeited)。几乎没有胜率，除非转诈唬。" 
     },
     
-    // 3. 听牌 (Draws) - 潜力与半诈唬
+    // Draws (基于 Doc 4.1 & 6.2)
     combo_draw: { 
-        label: "双重听牌 (Combo Draw)", 
-        advice: "全压/重注 (Monster Draw)", 
-        reason: "同时听花和顺(甚至对子)！你的胜率往往比成牌还高(Flip)。这是最完美的半诈唬时机，推All-in吧！" 
+        label: "双重听牌 (Monster Draw)", 
+        advice: "全压/重注 (54% Equity)", 
+        reason: "花顺双听！根据数据，你有15张补牌，胜率超过50%，甚至领先顶对。这是最完美的半诈唬全压时机！" 
     },
     flush_draw_nut: { 
-        label: "坚果同花听牌 (Nut Flush Draw)", 
+        label: "坚果同花听牌 (Nut FD)", 
         advice: "半诈唬/跟注", 
-        reason: "A花听牌！即使没中也有机会靠A赢，且对手通常会忌惮A花。可以玩得非常激进。" 
+        reason: "A花听牌！有9张补牌成花，且A本身有摊牌价值。具有极高的弃牌率(Fold Equity)和胜率。" 
     },
     flush_draw: { 
         label: "同花听牌 (Flush Draw)", 
         advice: "跟注/半诈唬", 
-        reason: "还需要1张同花(约19%机率下一张中)。赔率合适可跟注，或者加注夺取主动权(Fold Equity)。" 
+        reason: "9张补牌 (约35%胜率)。如果赔率合适可跟注；如果对手示弱，可加注半诈唬。" 
     },
     straight_draw_oesd: { 
         label: "两头顺听牌 (OESD)", 
         advice: "积极进攻", 
-        reason: "你有8张补牌成顺(约17%机率)。这是很强的听牌，不要玩得太被动。" 
+        reason: "8张补牌 (约31.5%胜率)。这是一个强听牌，不要玩得太被动，给对手压力。" 
     },
     straight_draw_gutshot: { 
         label: "卡顺听牌 (Gutshot)", 
         advice: "谨慎/半诈唬", 
-        reason: "只有4张补牌(约9%机率)。除非极其便宜，或者你有额外的后门花权益，否则别重注追。" 
-    },
-    pair_plus_draw: {
-        label: "对子+听牌 (Pair + Draw)",
-        advice: "强势进攻",
-        reason: "你有成牌(对子)作为保险，还有听牌作为升级潜力。这是非常强大的牌型，不要怕打光筹码。"
+        reason: "只有4张补牌 (约16.5%胜率)。胜率较低，除非有后门花权益或底池赔率极好，否则不要重注追。" 
     },
     
-    // 4. 空气
+    // Air
     overcards: { 
         label: "两张高牌 (Overcards)", 
-        advice: "观望/飘打 (Float)", 
-        reason: "暂无成牌，但如果你有位置优势，可以考虑飘打(Float)一条街，看转牌是否能击中。" 
+        advice: "飘打/过牌 (Float)", 
+        reason: "暂无成牌，但有6张补牌成顶对。利用位置优势飘打(Float)，看转牌是否能击中或诈唬。" 
     },
     trash: { 
         label: "空气牌 (Trash)", 
         advice: "弃牌/纯诈唬", 
-        reason: "毫无胜率。除非你是为了偷底池(且确信对手很弱)，否则快跑，别浪费钱。" 
+        reason: "毫无胜率。除非你有极强的读牌认为对手也是空气，否则根据MDF理论，这里应该弃牌。" 
     }
   },
   
   en: {
-    // --- Pre-flop ---
-    pre_monster_pair: { label: "Premium Pair (AA-QQ)", advice: "Raise/4-Bet", reason: "Absolute powerhouses. Build a massive pot immediately to isolate opponents." },
-    pre_strong_pair: { label: "Strong Pair (JJ-99)", advice: "Raise/Call", reason: "Good value, but vulnerable to overcards (A/K/Q). Proceed with caution facing aggression." },
-    pre_small_pair: { label: "Set Mining (88-22)", advice: "Call Cheap", reason: "Goal: Hit a Set (Three of a Kind). Implicit odds are huge, but fold if you miss." },
-    pre_premium_high: { label: "Premium High (AK/AQ)", advice: "Raise for Value", reason: "Dominating hands. If you hit top pair, you usually have the best kicker (TPTK)." },
-    pre_broadway: { label: "Broadways (KJ/QJ)", advice: "Proceed with Caution", reason: "Good top pair potential, but easily dominated by AK/AQ. Be careful if resistance is heavy." },
-    
-    pre_suited_ace: { label: "Suited Ace (Axs)", advice: "Semi-Bluff/Blocker", reason: "Nut flush potential + Ace blocker. Excellent candidate for 3-bet bluffs." },
-    pre_suited_connector: { label: "Suited Connector", advice: "Speculate/Call", reason: "Monster killers! Great playability post-flop. Play them in position with deep stacks." },
-    pre_suited_gapper: { label: "Suited Gapper", advice: "Steal/Fold", reason: "Weaker than connectors, but playable from late position to steal blinds." },
-    pre_trash: { label: "Trash", advice: "Fold", reason: "Negative EV. Save your chips for better spots. Discipline wins games." },
+    // --- Pre-flop (Based on Doc 6.1) ---
+    pre_monster_pair: { label: "G1: Premium Pair", advice: "Raise/4-Bet", reason: "AA/KK/QQ. Top 1.4% of hands. 77-85% Equity. Build a massive pot immediately." },
+    pre_premium_high: { label: "G2: Strong Linear", advice: "Raise/3-Bet", reason: "AK/AQ/JJ. Dominates most ranges. High equity realization and potential for Top Pair Top Kicker." },
+    pre_strong_pair: { label: "G3/G4: Medium Pair", advice: "Raise/Call", reason: "TT-77. Vulnerable to overcards. Main value is Set Mining (11.8% chance)." },
+    pre_suited_ace: { label: "G6: Suited Ace", advice: "Bluff/Balance", reason: "A2s-A5s. Nut flush potential + Ace blocker. Perfect candidates for board coverage and bluffs." },
+    pre_suited_connector: { label: "G5: Suited Connector", advice: "Speculate/Call", reason: "T9s-65s. Monster killers. 40% equity pre-flop but huge implied odds deep stacked." },
+    pre_broadway: { label: "Broadways", advice: "Caution", reason: "KJ/QJ. Good top pair potential but beware of kicker domination (Reverse Implied Odds)." },
+    pre_trash: { label: "Trash", advice: "Fold", reason: "GTO folds bottom 70% range. Playing these is -EV long term." },
 
     // --- Post-flop ---
-    made_straight_flush: { label: "Straight Flush", advice: "Slowplay/Trap", reason: "The nuts! Focus solely on extracting maximum value from your opponent." },
-    made_quads: { label: "Quads", advice: "Slowplay", reason: "Invincible. Give opponents a chance to catch a hand so they can pay you off." },
-    made_full_house: { label: "Full House", advice: "Value Bet", reason: "Monster hand. Bet for value unless you fear a bigger boat." },
-    made_flush: { label: "Flush", advice: "Value/Defend", reason: "Strong hand. Beware of paired boards (Full House possibility). If Ace-high flush, you're golden." },
-    made_straight: { label: "Straight", advice: "Aggressive", reason: "Strong hand. Bet to deny equity to flush draws or extract value from sets." },
-    monster: { label: "Trips/Set", advice: "Fast Play", reason: "Sets are hidden monsters. Build the pot fast before the board gets scary." },
+    made_straight_flush: { label: "Straight Flush", advice: "Slowplay", reason: "The Emperor hand! You are invincible. Induce bluffs or value bet small." },
+    made_quads: { label: "Quads", advice: "Slowplay", reason: "0.24% hit rate. Invulnerable. Let opponents catch up to pay you off." },
+    made_full_house: { label: "Full House", advice: "Value Bet", reason: "Monster hand. Bet for value unless board is paired with higher cards." },
+    made_flush: { label: "Flush", advice: "Value/Defend", reason: "Strong hand. Beware of paired boards (Full House). Nut flush should play aggressively." },
+    made_straight: { label: "Straight", advice: "Aggressive", reason: "Strong hand. Fast play on flush-draw boards to deny equity." },
+    monster: { label: "Set/Trips", advice: "Fast Play", reason: "Sets are hidden monsters. Build pot fast on wet textures; trap on dry ones." },
 
-    top_pair: { label: "Top Pair", advice: "Value/Pot Control", reason: "You likely have the best hand. Bet for value on dry boards; protect on wet boards." },
-    overpair: { label: "Overpair", advice: "Strong Value", reason: "Your pair is bigger than the board. Very strong, but watch out for sets." },
-    middle_pair: { label: "Middle Pair", advice: "Bluff Catch", reason: "Showdown value. Keep the pot small and try to get to showdown cheaply." },
+    top_pair: { label: "Top Pair", advice: "Value/Control", reason: "Usually the best hand. Bet for value on dry boards; protect on wet boards." },
+    middle_pair: { label: "Middle Pair", advice: "Bluff Catch", reason: "Showdown value. Pot control and catch bluffs based on MDF logic." },
     bottom_pair: { label: "Bottom Pair", advice: "Check/Fold", reason: "Weak value. Only beats a bluff. Fold to significant aggression." },
-    pocket_pair_below: { label: "Underpair", advice: "Check/Fold", reason: "Your hand is counterfeited. Very little value." },
+    pocket_pair_below: { label: "Underpair", advice: "Check/Fold", reason: "Counterfeited pair. Very low equity. Fold or turn into a bluff." },
     
-    combo_draw: { label: "Combo Draw", advice: "All-In/Jam", reason: "Flush + Straight draw. You often have >50% equity even against top pair. Aggression pays off!" },
-    flush_draw_nut: { label: "Nut Flush Draw", advice: "Semi-Bluff", reason: "Drawing to the Ace-high flush. Huge equity and fold equity combined." },
-    flush_draw: { label: "Flush Draw", advice: "Call/Raise", reason: "9 outs to a flush. Playable, but don't overcommit without the right odds." },
-    straight_draw_oesd: { label: "Open-Ended Straight", advice: "Aggressive", reason: "8 outs. A very solid draw that can be played aggressively." },
-    straight_draw_gutshot: { label: "Gutshot", advice: "Caution", reason: "Only 4 outs. Don't chase unless you have pot odds or backdoor equity." },
-    pair_plus_draw: { label: "Pair + Draw", advice: "Strong Aggression", reason: "Current value + Future potential. A very robust hand to play for stacks." },
+    combo_draw: { label: "Monster Draw", advice: "All-In (54% Eq)", reason: "Flush + Straight draw. 15 Outs! You are often a favorite against Top Pair. Jam for fold equity + equity." },
+    flush_draw_nut: { label: "Nut Flush Draw", advice: "Semi-Bluff", reason: "9 Outs + Ace High. Huge equity and fold equity combined. Play aggressively." },
+    flush_draw: { label: "Flush Draw", advice: "Call/Raise", reason: "9 Outs (~35%). Call with odds, or raise to apply pressure." },
+    straight_draw_oesd: { label: "OESD", advice: "Aggressive", reason: "8 Outs (~31.5%). Strong draw. Don't play passively." },
+    straight_draw_gutshot: { label: "Gutshot", advice: "Caution", reason: "4 Outs (~16.5%). Low equity. Only continue with great odds or backdoor potential." },
 
-    overcards: { label: "Overcards", advice: "Float/Check", reason: "No made hand, but 6 outs to top pair. Play carefully." },
-    trash: { label: "Trash", advice: "Fold/Pure Bluff", reason: "Zero equity. Give up unless you have a specific read to bluff." }
+    overcards: { label: "Overcards", advice: "Float/Check", reason: "6 Outs to Top Pair. Float in position if opponent shows weakness." },
+    trash: { label: "Trash", advice: "Fold/Bluff", reason: "Zero equity. Fold unless you have a specific read to bluff." }
   }
 };
 
-// --- 多语言文本 (Localization) - v5.0 Simplified Chinese ---
+// --- 5. UI 文本 (Localization) ---
 window.PokerData.TEXTS = {
   zh: {
     appTitle: '德州扑克智囊 Pro',
