@@ -1,7 +1,6 @@
 /**
- * Poker Advisor Pro - Data Layer (v6.0 - Extended GTO Modules)
- * 核心升级：集成位置策略、高级牌面纹理、概率速查表与动态策略配置
- * Based on: William Liu's "Poker Analysis & Data" Doc
+ * Poker Advisor Pro - Data Layer (v6.3 - Fully Localized)
+ * 修复：补全所有缺失的中文翻译键值 (UI Labels, Strategy Reasons, Settings)
  */
 
 window.PokerData = {};
@@ -14,7 +13,7 @@ window.PokerData.CONSTANTS = {
   STREETS: ['Pre-flop', 'Flop', 'Turn', 'River']
 };
 
-// --- B. 位置与起手牌策略 (Position Logic) ---
+// --- B. 位置与起手牌策略 ---
 window.PokerData.POSITIONS = {
   EP: { 
     label: "前位 (EP)", 
@@ -42,7 +41,7 @@ window.PokerData.POSITIONS = {
   }
 };
 
-// --- C. 牌面纹理定义 (Board Texture Types) ---
+// --- C. 牌面纹理定义 ---
 window.PokerData.BOARD_TEXTURES = {
   dry: { 
     id: "dry",
@@ -62,7 +61,7 @@ window.PokerData.BOARD_TEXTURES = {
   }
 };
 
-// --- D. 牌面纹理新手教学 (Tooltips) ---
+// --- D. 牌面纹理新手教学 ---
 window.PokerData.TEXTURE_EXPLANATION = {
   dry: {
     title: "🌵 干燥牌面 (Dry)",
@@ -76,16 +75,14 @@ window.PokerData.TEXTURE_EXPLANATION = {
   }
 };
 
-// --- E. 数学概率与补牌速查表 (Math & Probabilities) ---
+// --- E. 数学概率与补牌速查表 ---
 window.PokerData.PROBABILITIES = {
-  // 翻牌击中概率
   flop_hit: {
     pocket_pair_to_set: { label: "中三条 (Set)", prob: 12, note: "8中1" },
     suited_to_flush: { label: "天胡同花", prob: 0.8, note: "极难" },
     suited_to_flush_draw: { label: "中听花", prob: 11, note: "主要价值" },
     any_two_to_pair: { label: "中一对", prob: 32, note: "最常见" }
   },
-  // 听牌补牌数与胜率 (用于 UI 显示)
   outs_lookup: {
     straight_draw_gutshot: { 
       label: "卡顺 (Gutshot)", 
@@ -126,7 +123,7 @@ window.PokerData.PROBABILITIES = {
   }
 };
 
-// --- F. 策略参数配置 (Strategy Config) ---
+// --- F. 策略参数配置 ---
 window.PokerData.STRATEGY_CONFIG = {
   preflop: {
     open_raise_base: 3.0, 
@@ -134,14 +131,14 @@ window.PokerData.STRATEGY_CONFIG = {
     min_equity_to_call: 33 
   },
   postflop: {
-    cbet_dry: 0.33, // 干燥面下 1/3
-    cbet_wet: 0.66, // 潮湿面下 2/3
+    cbet_dry: 0.33,
+    cbet_wet: 0.66,
     value_bet: 0.75, 
     bluff_raise: 3.0 
   }
 };
 
-// --- G. 手牌分析库 (保留 v5.1 修复版) ---
+// --- G. 手牌分析库 ---
 window.PokerData.HAND_ANALYSIS_DEFINITIONS = {
   zh: {
     pre_monster_pair: { label: "超级对子 (Monster)", advice: "加注/4-Bet", reason: "起手最强牌，不要慢打！" },
@@ -153,8 +150,11 @@ window.PokerData.HAND_ANALYSIS_DEFINITIONS = {
     pre_broadway: { label: "广播道 (Broadways)", advice: "谨慎进攻", reason: "容易成顶对，但踢脚往往不如对手。" },
     pre_trash: { label: "杂牌 (Trash)", advice: "弃牌 (Fold)", reason: "长期玩这种牌是亏损的根源。" },
 
+    // 修复：添加通用的同花顺定义，防止分析器返回 generic key 时报错
+    made_straight_flush: { label: "同花顺 (Straight Flush)", advice: "慢打/诱敌", reason: "绝世好牌！" },
     made_straight_flush_nuts: { label: "坚果同花顺 (Nuts)", advice: "慢打/诱敌", reason: "无敌！想办法让对手送钱。" },
     made_straight_flush_lower: { label: "低端同花顺 (Low SF)", advice: "极度危险", reason: "🛑 警告：存在更大的同花顺！" },
+    
     made_quads: { label: "四条 (Quads)", advice: "慢打", reason: "炸弹！极小概率输牌。" },
     made_full_house: { label: "满堂红 (Full House)", advice: "价值下注", reason: "除非撞上更大的葫芦，否则稳赢。" },
     made_flush_nuts: { label: "坚果同花 (Nut Flush)", advice: "价值下注", reason: "当前最大的同花，无惧对手。" },
@@ -177,12 +177,13 @@ window.PokerData.HAND_ANALYSIS_DEFINITIONS = {
   },
   en: {
     pre_monster_pair: { label: "Premium Pair", advice: "Raise/4-Bet", reason: "Build pot with AA/KK/QQ." },
+    made_straight_flush: { label: "Straight Flush", advice: "Slowplay", reason: "Monster hand." },
     made_straight_flush_nuts: { label: "Nut Straight Flush", advice: "Slowplay", reason: "Invincible." },
     trash: { label: "Trash", advice: "Fold", reason: "No value." }
   }
 };
 
-// --- H. 具体纹理特征 (保留原有) ---
+// --- H. 具体纹理特征 ---
 window.PokerData.TEXTURE_STRATEGIES = {
   TEX_PAIRED: { name: "公对面 (Paired)", desc: "有人可能中三条或葫芦。" },
   TEX_MONOTONE: { name: "单色面 (Monotone)", desc: "极度危险，易有同花。" },
@@ -191,7 +192,7 @@ window.PokerData.TEXTURE_STRATEGIES = {
   TEX_RAINBOW_DRY: { name: "干燥面 (Dry)", desc: "安全，适合诈唬。" }
 };
 
-// --- I. UI 文本 (v5.1 完整版) ---
+// --- I. UI 文本 (完全汉化版) ---
 window.PokerData.TEXTS = {
   zh: {
     appTitle: '德州扑克智囊 Pro',
@@ -225,10 +226,31 @@ window.PokerData.TEXTS = {
     selecting_river: '选择河牌',
     add_player: '添加对手',
     
+    // --- 新增缺失的翻译 ---
+    my_position: '我的位置',
+    bet_placeholder: '输入下注额',
+    players: '对手列表',
+    betSizing: '智能下注建议',
+    bet_size_small: '小注 (1/3)',
+    bet_size_med: '中注 (2/3)',
+    bet_size_large: '满池 (Pot)',
+    bet_size_over: '超池 (Overbet)',
+    deck_info: '模拟使用的牌副数 (标准1副)',
+    buy_in_info: '重买时的默认筹码量',
+    
     advice_raise: '建议加注 (Raise)',
     advice_call: '建议跟注 (Call)',
     advice_fold: '建议弃牌 (Fold)',
     advice_raise_bluff: '建议诈唬 (Bluff)',
+    advice_allin: '建议全压 (All-In)',
+    advice_allin_bluff: '建议全压诈唬',
+    advice_check_call: '建议过牌/跟注',
+    
+    reason_spr_low: 'SPR过低，已套池',
+    reason_value: '强牌价值下注',
+    reason_bluff_semi: '听牌半诈唬',
+    reason_bluff_pure: '纯诈唬 (位置/形象)',
+    reason_odds: '赔率合适/过牌控池',
     
     maniac: '疯鱼模式',
     aggressive: '激进模式',
@@ -276,10 +298,31 @@ window.PokerData.TEXTS = {
     selecting_river: 'Select River',
     add_player: 'Add Opponent',
     
+    // --- Added Missing English Keys ---
+    my_position: 'My Position',
+    bet_placeholder: 'Bet Amount',
+    players: 'Opponents',
+    betSizing: 'Bet Sizing',
+    bet_size_small: 'Small (1/3)',
+    bet_size_med: 'Med (2/3)',
+    bet_size_large: 'Pot',
+    bet_size_over: 'Overbet',
+    deck_info: 'Number of decks for sim',
+    buy_in_info: 'Default rebuy amount',
+    
     advice_raise: 'Advice: Raise',
     advice_call: 'Advice: Call',
     advice_fold: 'Advice: Fold',
     advice_raise_bluff: 'Advice: Bluff',
+    advice_allin: 'Advice: All-In',
+    advice_allin_bluff: 'Advice: Bluff All-In',
+    advice_check_call: 'Advice: Check/Call',
+    
+    reason_spr_low: 'Low SPR, Pot Committed',
+    reason_value: 'Value Bet',
+    reason_bluff_semi: 'Semi-Bluff',
+    reason_bluff_pure: 'Pure Bluff',
+    reason_odds: 'Good Odds / Pot Control',
     
     maniac: 'Maniac',
     aggressive: 'Aggressive',

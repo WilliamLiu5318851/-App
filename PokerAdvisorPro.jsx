@@ -18,8 +18,8 @@ const { CONSTANTS, HAND_ANALYSIS_DEFINITIONS, TEXTURE_STRATEGIES, POSITIONS, BOA
 const { SUITS, RANKS, RANK_VALUES } = CONSTANTS;
 
 /**
- * 德州扑克助手 Pro (v6.2 - UX Polish)
- * 修复：转牌(Turn)选完后不再自动跳到河牌，优化选牌器自动关闭逻辑
+ * 德州扑克助手 Pro (v6.3 - Fully Localized)
+ * 修复：汉化不全问题，替换所有硬编码英文字符串
  */
 
 // --- 核心算法 ---
@@ -275,21 +275,51 @@ function TexasHoldemAdvisor() {
       const textureStrategy = textureKey ? TEXTURE_STRATEGIES[textureKey] : null;
       const posData = heroPosition ? POSITIONS[heroPosition] : null;
       
-      // 4. 生成建议
+      // 4. 生成建议 (Localizable Keys)
       let adviceKey = 'advice_fold';
-      let finalReason = `Pot Odds: ${potOdds.toFixed(1)}%`;
+      let reasonKey = 'reason_odds';
 
-      if (equity > 70) adviceKey = 'advice_raise';
-      else if (equity > potOdds * 1.1) adviceKey = 'advice_call';
-      else adviceKey = 'advice_fold';
+      let requiredEquity = potOdds * 1.1; 
+      const isManiac = strategy === 'maniac';
 
-      if (strategy === 'maniac' && equity > 20) adviceKey = 'advice_raise_bluff';
+      if (parseFloat(spr) < 1.5 && equity > (isManiac ? 15 : 30)) {
+        adviceKey = isManiac ? 'advice_allin_bluff' : 'advice_allin';
+        reasonKey = 'reason_spr_low';
+      } else if (callAmount === 0) {
+        if (equity > 65) {
+          adviceKey = 'advice_raise';
+          reasonKey = 'reason_value';
+        } else if (equity > 45 && strategy !== 'conservative') {
+          adviceKey = 'advice_raise';
+          reasonKey = 'reason_bluff_semi';
+        } else if (isManiac && equity > 20) {
+          adviceKey = 'advice_raise_bluff';
+          reasonKey = 'reason_bluff_pure';
+        } else {
+          adviceKey = 'advice_check_call';
+          reasonKey = 'reason_odds';
+        }
+      } else {
+        if (equity > requiredEquity + 15) {
+           adviceKey = 'advice_raise';
+           reasonKey = 'reason_value';
+        } else if (equity >= requiredEquity) {
+           adviceKey = 'advice_call';
+           reasonKey = 'reason_odds';
+        } else if (isManiac && equity > 15 && equity < requiredEquity) {
+           adviceKey = 'advice_raise_bluff';
+           reasonKey = 'reason_bluff_pure';
+        } else {
+           adviceKey = 'advice_fold';
+        }
+      }
 
       // 位置修正
+      let finalReason = t[reasonKey] || `Pot Odds: ${potOdds.toFixed(1)}%`;
       if (posData) {
          finalReason += `\n[${posData.label}]: ${posData.action_plan}`;
          if (posData.range_modifier === 'Tight' && adviceKey === 'advice_call' && equity < 45) adviceKey = 'advice_fold';
-         if (posData.range_modifier === 'Loose' && adviceKey === 'advice_fold' && equity > 25 && callAmount === 0) adviceKey = 'advice_check'; 
+         if (posData.range_modifier === 'Loose' && adviceKey === 'advice_fold' && equity > 25 && callAmount === 0) adviceKey = 'advice_check_call'; 
       }
 
       let finalAdvice = t[adviceKey] || "Advice N/A";
@@ -315,10 +345,11 @@ function TexasHoldemAdvisor() {
 
       // 手牌库覆盖
       if (analysisData) {
+         finalReason = analysisData.reason; // 覆盖通用理由
          if (analysisKey.startsWith('made_') || analysisKey.includes('monster') || analysisKey === 'pre_monster_pair') {
              finalAdvice = analysisData.advice;
          }
-         if (!drawStats) finalReason = `${analysisData.reason}\n` + finalReason;
+         if (drawStats) finalReason += `\n🎲 ${drawStats.label} (${drawStats.outs} Outs)`;
       }
 
       // 5. 动态下注尺度
@@ -439,7 +470,6 @@ function TexasHoldemAdvisor() {
                          if (selectingFor.index === 0) nextState = {type:'hero', index:1};
                        } else {
                          const b = [...communityCards]; b[selectingFor.index] = card; setCommunityCards(b);
-                         // 修复逻辑：只有翻牌圈(Index < 2)才自动跳转，Turn(3)和River(4)选完即停
                          if (selectingFor.index < 2) nextState = {type:'board', index: selectingFor.index+1};
                        }
                        
@@ -457,7 +487,7 @@ function TexasHoldemAdvisor() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-10">
       <div className="bg-slate-900 border-b border-slate-800 p-4 sticky top-0 z-30 shadow-md flex justify-between items-center">
-         <div className="flex items-center gap-2 text-emerald-500 font-bold"><Trophy className="w-5 h-5"/> {t.appTitle} <span className="text-[10px] bg-slate-800 px-1 rounded text-slate-500">v6.2</span></div>
+         <div className="flex items-center gap-2 text-emerald-500 font-bold"><Trophy className="w-5 h-5"/> {t.appTitle} <span className="text-[10px] bg-slate-800 px-1 rounded text-slate-500">v6.3</span></div>
          <div className="flex gap-2">
             <button onClick={() => setStrategy(s => s==='conservative'?'aggressive':s==='aggressive'?'maniac':'conservative')} className={`px-3 py-1.5 rounded-full border flex gap-1 items-center text-xs ${getStrategyStyle()}`}>{strategy==='maniac'&&<Flame className="w-3 h-3"/>}{getStrategyLabel()}</button>
             <button onClick={() => setShowSettings(true)} className="p-2 bg-slate-800 rounded-full border border-slate-700"><Settings className="w-4 h-4"/></button>
@@ -498,7 +528,8 @@ function TexasHoldemAdvisor() {
          {/* Hero Hand & Position Selector (Combined) */}
          <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 space-y-4">
             <div className="flex justify-between items-center">
-              <span className="text-xs text-slate-400 font-bold flex gap-1"><MapPin className="w-3 h-3"/> My Position</span>
+              {/* 修复：替换硬编码的 "My Position" */}
+              <span className="text-xs text-slate-400 font-bold flex gap-1"><MapPin className="w-3 h-3"/> {t.my_position}</span>
               <div className="flex bg-slate-900 rounded p-1">
                 {['EP','MP','LP','BLINDS'].map(pos => (
                   <button key={pos} onClick={() => setHeroPosition(pos)} className={`px-3 py-1 text-[10px] rounded ${heroPosition===pos ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}>{pos}</button>
@@ -521,13 +552,14 @@ function TexasHoldemAdvisor() {
                      </button>
                      <button onClick={() => setHeroBet(heroStack)} className="flex-1 bg-red-600 hover:bg-red-500 py-2 rounded text-xs text-white">All-In</button>
                   </div>
-                  <input type="number" value={heroBet===0?'':heroBet} onChange={e => handleHeroBetChange(e.target.value)} placeholder="Bet Amount" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right font-mono"/>
+                  {/* 修复：替换硬编码的 placeholder */}
+                  <input type="number" value={heroBet===0?'':heroBet} onChange={e => handleHeroBetChange(e.target.value)} placeholder={t.bet_placeholder} className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right font-mono"/>
                </div>
             </div>
          </div>
 
          <div className="space-y-2">
-            <div className="flex justify-between items-center px-1"><span className="text-xs font-bold text-slate-400">Opponents</span><button onClick={() => setPlayers([...players, {id: Date.now(), bet: 0, totalContributed: 0, active: true}])} className="text-[10px] bg-slate-800 border border-slate-600 px-2 py-0.5 rounded text-slate-300">+ {t.add_player}</button></div>
+            <div className="flex justify-between items-center px-1"><span className="text-xs font-bold text-slate-400">{t.players}</span><button onClick={() => setPlayers([...players, {id: Date.now(), bet: 0, totalContributed: 0, active: true}])} className="text-[10px] bg-slate-800 border border-slate-600 px-2 py-0.5 rounded text-slate-300">+ {t.add_player}</button></div>
             {players.map((p, idx) => (
                <div key={p.id} className={`flex items-center gap-3 bg-slate-800 p-2 rounded-lg border ${p.active ? 'border-slate-700' : 'opacity-50 border-transparent'}`}>
                   <div className="w-6 h-6 rounded-full bg-slate-600 flex items-center justify-center text-xs font-bold text-slate-400">{idx+1}</div>
@@ -596,19 +628,23 @@ function TexasHoldemAdvisor() {
                )}
                
                {result.betSizes && (
-                 <div className="grid grid-cols-3 gap-3 pt-2 border-t border-slate-800/50">
-                    <button onClick={() => setHeroBet(result.betSizes.smart)} className="flex flex-col items-center p-2 rounded bg-emerald-900/20 border border-emerald-500/30 hover:bg-emerald-900/40 transition">
-                      <div className="text-[10px] text-emerald-400 mb-1 uppercase tracking-wider flex items-center gap-1"><Zap className="w-3 h-3"/> Smart</div>
-                      <div className="font-mono font-bold text-emerald-300">{result.betSizes.smart}</div>
-                    </button>
-                    <button onClick={() => setHeroBet(result.betSizes.value)} className="flex flex-col items-center p-2 rounded hover:bg-slate-800 border border-transparent hover:border-slate-700">
-                      <div className="text-[10px] text-slate-500 mb-1">Value</div>
-                      <div className="font-mono font-bold text-blue-300">{result.betSizes.value}</div>
-                    </button>
-                    <button onClick={() => setHeroBet(result.betSizes.pot)} className="flex flex-col items-center p-2 rounded hover:bg-slate-800 border border-transparent hover:border-slate-700">
-                      <div className="text-[10px] text-slate-500 mb-1">Pot</div>
-                      <div className="font-mono font-bold text-blue-300">{result.betSizes.pot}</div>
-                    </button>
+                 <div>
+                   {/* 修复：添加下注建议标题 */}
+                   <div className="text-xs text-slate-500 mb-2 flex items-center gap-1"><MousePointerClick className="w-3 h-3"/> {t.betSizing}</div>
+                   <div className="grid grid-cols-3 gap-3 pt-2 border-t border-slate-800/50">
+                      <button onClick={() => setHeroBet(result.betSizes.smart)} className="flex flex-col items-center p-2 rounded bg-emerald-900/20 border border-emerald-500/30 hover:bg-emerald-900/40 transition">
+                        <div className="text-[10px] text-emerald-400 mb-1 uppercase tracking-wider flex items-center gap-1"><Zap className="w-3 h-3"/> {t.bet_size_small}</div>
+                        <div className="font-mono font-bold text-emerald-300">{result.betSizes.smart}</div>
+                      </button>
+                      <button onClick={() => setHeroBet(result.betSizes.value)} className="flex flex-col items-center p-2 rounded hover:bg-slate-800 border border-transparent hover:border-slate-700">
+                        <div className="text-[10px] text-slate-500 mb-1">{t.bet_size_med}</div>
+                        <div className="font-mono font-bold text-blue-300">{result.betSizes.value}</div>
+                      </button>
+                      <button onClick={() => setHeroBet(result.betSizes.pot)} className="flex flex-col items-center p-2 rounded hover:bg-slate-800 border border-transparent hover:border-slate-700">
+                        <div className="text-[10px] text-slate-500 mb-1">{t.bet_size_large}</div>
+                        <div className="font-mono font-bold text-blue-300">{result.betSizes.pot}</div>
+                      </button>
+                   </div>
                  </div>
                )}
              </div>
@@ -623,17 +659,20 @@ function TexasHoldemAdvisor() {
                <div className="flex justify-between mb-4"><h3 className="font-bold text-white flex items-center gap-2"><Settings className="w-4 h-4"/> {t.game_settings}</h3><button onClick={() => setShowSettings(false)}><X/></button></div>
                <div className="space-y-4">
                   <div>
+                     {/* 修复：替换硬编码的说明文字 */}
                      <label className="block text-sm text-slate-400 mb-2">{t.deck_count}: <span className="text-white font-mono">{deckCount}</span></label>
                      <input type="range" min="1" max="8" value={deckCount} onChange={e => setDeckCount(Number(e.target.value))} className="w-full accent-blue-500"/>
                      <div className="flex justify-between text-xs text-slate-600 font-mono"><span>1</span><span>8</span></div>
+                     <p className="text-[10px] text-slate-500 mt-1">{t.deck_info}</p>
                   </div>
                   <div>
                      <label className="block text-sm text-slate-400 mb-2">{t.buy_in_amount}</label>
                      <div className="flex items-center bg-slate-900 rounded border border-slate-700"><span className="px-3 text-slate-500">$</span><input type="number" value={buyInAmount} onChange={e => setBuyInAmount(Number(e.target.value))} className="w-full bg-transparent py-2 text-white font-mono focus:outline-none"/></div>
+                     <p className="text-[10px] text-slate-500 mt-1">{t.buy_in_info}</p>
                   </div>
                   <div className="p-3 bg-slate-900 rounded text-xs text-slate-500 border border-slate-700">
-                     <p>GTO Engine v6.2 Active</p>
-                     <p className="mt-1 text-emerald-500">• Smart Card Selector</p>
+                     <p>GTO Engine v6.3 Active</p>
+                     <p className="mt-1 text-emerald-500">• Fully Localized</p>
                   </div>
                </div>
             </div>
