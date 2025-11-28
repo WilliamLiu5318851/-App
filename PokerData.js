@@ -1,6 +1,9 @@
 /**
- * Poker Advisor Pro - Data Layer (v6.9.1 - Hotfix)
- * 修复：紧急找回在 v6.9 中意外丢失的英文版牌型定义 (lines 170-200+)，同时保留高牌细分逻辑
+ * Poker Advisor Pro - Data Layer (v7.0 - Strict Hand Logic)
+ * 核心升级：
+ * 1. 翻牌前新增 pre_high_card (K-rag 等)，区分于 pre_trash。
+ * 2. 修正垃圾牌建议为 "Check/Fold"，避免误导用户跟注。
+ * 3. 严格保留所有英文定义，防止回归错误。
  */
 
 window.PokerData = {};
@@ -18,8 +21,8 @@ window.PokerData.STRATEGY_PROFILES = {
   conservative: {
     label_zh: "保守型 (Tight)",
     label_en: "Conservative",
-    equity_buffer: 1.15,
-    raise_threshold: 70,
+    equity_buffer: 1.2, // 提高跟注门槛
+    raise_threshold: 75,
     bluff_equity: 100,
     bet_sizing: { small: 0.33, med: 0.5, large: 0.66 }
   },
@@ -94,9 +97,10 @@ window.PokerData.STRATEGY_CONFIG = {
   postflop: { cbet_dry: 0.33, cbet_wet: 0.66, value_bet: 0.75, bluff_raise: 3.0 }
 };
 
-// --- F. 手牌分析库 (关键修复：补全英文定义) ---
+// --- F. 手牌分析库 ---
 window.PokerData.HAND_ANALYSIS_DEFINITIONS = {
   zh: {
+    // Pre-flop High Value
     pre_monster_pair: { label: "超级对子 (Monster)", advice: "加注/4-Bet", reason: "起手最强牌，不要慢打！" },
     pre_strong_pair: { label: "强对子 (Strong Pair)", advice: "加注/跟注", reason: "有价值，但小心高牌翻出。" },
     pre_small_pair: { label: "小对子 (Set Mining)", advice: "投机/埋伏", reason: "目标是中三条(Set)，没中就扔。" },
@@ -104,8 +108,12 @@ window.PokerData.HAND_ANALYSIS_DEFINITIONS = {
     pre_suited_connector: { label: "同花连张 (Suited Conn)", advice: "投机/跟注", reason: "隐含赔率极高，适合深筹码博大牌。" },
     pre_suited_ace: { label: "同花A (Suited Ace)", advice: "半诈唬/阻断", reason: "有A阻断坚果，且能听顺，非常灵活。" },
     pre_broadway: { label: "广播道 (Broadways)", advice: "谨慎进攻", reason: "容易成顶对，但踢脚往往不如对手。" },
-    pre_trash: { label: "杂牌 (Trash)", advice: "弃牌 (Fold)", reason: "长期玩这种牌是亏损的根源。" },
+    
+    // Pre-flop Marginal/Trash (New!)
+    pre_high_card: { label: "单张高牌 (High Card)", advice: "过牌/跟小注", reason: "有一张J/Q/K/A。位置好可玩，位置差建议弃。" },
+    pre_trash: { label: "垃圾牌 (Trash)", advice: "过牌/弃牌", reason: "牌力太差，长期玩必输。别浪。" },
 
+    // Post-flop
     made_straight_flush: { label: "同花顺 (Straight Flush)", advice: "慢打/诱敌", reason: "绝世好牌！" },
     made_straight_flush_nuts: { label: "坚果同花顺 (Nuts)", advice: "慢打/诱敌", reason: "无敌！想办法让对手送钱。" },
     made_straight_flush_lower: { label: "低端同花顺 (Low SF)", advice: "极度危险", reason: "🛑 警告：存在更大的同花顺！" },
@@ -128,13 +136,12 @@ window.PokerData.HAND_ANALYSIS_DEFINITIONS = {
     combo_draw: { label: "双重听牌 (Combo Draw)", advice: "全压/重注", reason: "胜率极高，甚至领先成牌！" },
     overcards: { label: "两张高牌 (Overcards)", advice: "观望/飘打", reason: "暂无成牌，可尝试诈唬。" },
     
-    // v6.9 新增
+    // Post-flop High/Low (v6.9)
     high_card_good: { label: "强高牌 (Good High Card)", advice: "过牌/跟小注", reason: "J/Q/K/A 拥有摊牌价值，若便宜可看一张。" },
     high_card_weak: { label: "弱高牌 (Weak High Card)", advice: "过牌/弃牌", reason: "牌力太弱，很难获胜，建议放弃。" },
     
     trash: { label: "空气牌 (Trash)", advice: "弃牌 (Fold)", reason: "毫无胜率，快跑。" }
   },
-  // 核心修复：找回所有被误删的英文定义
   en: {
     pre_monster_pair: { label: "Premium Pair", advice: "Raise/4-Bet", reason: "Build pot with AA/KK/QQ." },
     pre_strong_pair: { label: "Strong Pair", advice: "Raise/Call", reason: "Good value, but watch out for overcards." },
@@ -143,7 +150,10 @@ window.PokerData.HAND_ANALYSIS_DEFINITIONS = {
     pre_suited_connector: { label: "Suited Connector", advice: "Speculate", reason: "High implied odds. Great for deep stacks." },
     pre_suited_ace: { label: "Suited Ace", advice: "Semi-Bluff", reason: "Blocker to nut flush + wheel potential." },
     pre_broadway: { label: "Broadways", advice: "Caution", reason: "Good top pair potential but kicker trouble." },
-    pre_trash: { label: "Trash", advice: "Fold", reason: "No value. Save your chips." },
+    
+    // Pre-flop New
+    pre_high_card: { label: "High Card", advice: "Check/Call Small", reason: "Has J/Q/K/A. Playable in position." },
+    pre_trash: { label: "Trash", advice: "Check/Fold", reason: "Negative EV hand. Fold." },
 
     made_straight_flush: { label: "Straight Flush", advice: "Slowplay", reason: "Monster hand." },
     made_straight_flush_nuts: { label: "Nut Straight Flush", advice: "Slowplay", reason: "Invincible hand. Extract max value." },
@@ -167,7 +177,6 @@ window.PokerData.HAND_ANALYSIS_DEFINITIONS = {
     combo_draw: { label: "Combo Draw", advice: "All-in", reason: "Massive equity! Often ahead of made hands." },
     overcards: { label: "Overcards", advice: "Float", reason: "No made hand, but 6 outs." },
     
-    // v6.9 新增 (英文)
     high_card_good: { label: "Good High Card", advice: "Check/Call Small", reason: "J/Q/K/A has showdown value." },
     high_card_weak: { label: "Weak High Card", advice: "Check/Fold", reason: "Very weak. Fold to aggression." },
     
