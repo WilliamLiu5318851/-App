@@ -9,9 +9,17 @@
     <!-- 1. 样式库 -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- 2. React 核心库 (全局 UMD 版本) -->
-    <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+    <!-- 2. Import Map (核心：定义所有模块的下载地址) -->
+    <!-- 这解决了 "react not found" 的问题 -->
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+        "lucide-react": "https://esm.sh/lucide-react@0.292.0"
+      }
+    }
+    </script>
     
     <!-- 3. Babel 编译器 (用于解析 JSX) -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -23,20 +31,13 @@
         input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         .error-box { color: #f87171; background: rgba(255,0,0,0.1); border: 1px solid #ef4444; padding: 1rem; margin-top: 20px; display: none; }
     </style>
-    
-    <!-- 4. 图标库 -->
-    <script type="importmap">
-    {
-      "imports": {
-        "lucide-react": "https://esm.sh/lucide-react@0.292.0"
-      }
-    }
-    </script>
 </head>
 <body>
     <div id="root">
         <div class="loading">
-            <div>正在启动引擎...</div>
+            <div style="font-size: 1.2rem; font-weight: bold; margin-bottom: 10px;">德州扑克智囊 Pro</div>
+            <div>正在启动引擎 (v4.7)...</div>
+            <div style="font-size: 0.8rem; margin-top: 5px; opacity: 0.6;">Loading Modules...</div>
             <div id="error-display" class="error-box"></div>
         </div>
     </div>
@@ -46,16 +47,16 @@
         window.addEventListener('error', e => {
             const el = document.getElementById('error-display');
             el.style.display = 'block';
-            el.innerText = `❌ 错误: ${e.message}`;
+            el.innerText = `❌ 程序错误: ${e.message}`;
         });
     </script>
 
-    <!-- ★★★ 关键顺序 ★★★ -->
+    <!-- ★★★ 加载顺序 ★★★ -->
     
-    <!-- 5. 先加载数据文件 (普通脚本，阻塞加载，确保运行) -->
+    <!-- 4. 先加载数据文件 (普通脚本) -->
     <script src="./PokerData.js"></script>
 
-    <!-- 6. 再加载主逻辑 (Babel 编译 JSX) -->
+    <!-- 5. 再加载主逻辑 (ESM 模块) -->
     <script type="text/babel" data-type="module" src="./PokerAdvisorPro.jsx"></script>
 </body>
 </html>
