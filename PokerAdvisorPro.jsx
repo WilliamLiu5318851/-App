@@ -18,8 +18,8 @@ const { CONSTANTS, HAND_ANALYSIS_DEFINITIONS, TEXTURE_STRATEGIES, POSITIONS, BOA
 const { SUITS, RANKS, RANK_VALUES } = CONSTANTS;
 
 /**
- * 德州扑克助手 Pro (v6.3 - Fully Localized)
- * 修复：汉化不全问题，替换所有硬编码英文字符串
+ * 德州扑克助手 Pro (v6.4 - Flexible Stack)
+ * 修复：我的筹码 (Hero Stack) 现在是可编辑的输入框，支持随时买入
  */
 
 // --- 核心算法 ---
@@ -275,7 +275,7 @@ function TexasHoldemAdvisor() {
       const textureStrategy = textureKey ? TEXTURE_STRATEGIES[textureKey] : null;
       const posData = heroPosition ? POSITIONS[heroPosition] : null;
       
-      // 4. 生成建议 (Localizable Keys)
+      // 4. 生成建议
       let adviceKey = 'advice_fold';
       let reasonKey = 'reason_odds';
 
@@ -487,7 +487,7 @@ function TexasHoldemAdvisor() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-10">
       <div className="bg-slate-900 border-b border-slate-800 p-4 sticky top-0 z-30 shadow-md flex justify-between items-center">
-         <div className="flex items-center gap-2 text-emerald-500 font-bold"><Trophy className="w-5 h-5"/> {t.appTitle} <span className="text-[10px] bg-slate-800 px-1 rounded text-slate-500">v6.3</span></div>
+         <div className="flex items-center gap-2 text-emerald-500 font-bold"><Trophy className="w-5 h-5"/> {t.appTitle} <span className="text-[10px] bg-slate-800 px-1 rounded text-slate-500">v6.4</span></div>
          <div className="flex gap-2">
             <button onClick={() => setStrategy(s => s==='conservative'?'aggressive':s==='aggressive'?'maniac':'conservative')} className={`px-3 py-1.5 rounded-full border flex gap-1 items-center text-xs ${getStrategyStyle()}`}>{strategy==='maniac'&&<Flame className="w-3 h-3"/>}{getStrategyLabel()}</button>
             <button onClick={() => setShowSettings(true)} className="p-2 bg-slate-800 rounded-full border border-slate-700"><Settings className="w-4 h-4"/></button>
@@ -528,7 +528,6 @@ function TexasHoldemAdvisor() {
          {/* Hero Hand & Position Selector (Combined) */}
          <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 space-y-4">
             <div className="flex justify-between items-center">
-              {/* 修复：替换硬编码的 "My Position" */}
               <span className="text-xs text-slate-400 font-bold flex gap-1"><MapPin className="w-3 h-3"/> {t.my_position}</span>
               <div className="flex bg-slate-900 rounded p-1">
                 {['EP','MP','LP','BLINDS'].map(pos => (
@@ -544,7 +543,20 @@ function TexasHoldemAdvisor() {
                   </div>
                ))}
                <div className="flex-1 space-y-2">
-                  <div className="flex justify-between text-xs text-slate-400"><span>{t.heroStack}</span><span>{heroStack}</span></div>
+                  <div className="flex justify-between items-center text-xs text-slate-400">
+                      <span>{t.heroStack}</span>
+                      {/* 修复：添加可编辑输入框和快速重买按钮 */}
+                      <div className="flex items-center gap-1">
+                          {heroStack === 0 && <button onClick={() => setHeroStack(buyInAmount)} className="text-[10px] bg-emerald-900 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-800 flex items-center gap-1"><RotateCcw className="w-3 h-3"/> {t.rebuy}</button>}
+                          <input 
+                            type="number" 
+                            value={heroStack === 0 ? '' : heroStack} 
+                            onChange={e => handleStackChange(e.target.value)} 
+                            className="w-24 bg-transparent border-b border-slate-600 text-right text-emerald-400 font-mono focus:outline-none focus:border-emerald-500" 
+                            placeholder="0"
+                          />
+                      </div>
+                  </div>
                   <div className="flex gap-2">
                      <button onClick={() => setHeroBet(0)} className="flex-1 bg-slate-600 hover:bg-slate-500 py-2 rounded text-xs text-slate-200">{t.btn_fold}</button>
                      <button onClick={() => setHeroBet(safeCallAmount)} className={`flex-1 py-2 rounded text-xs flex items-center justify-center gap-1 text-white ${isCallAllIn ? 'bg-red-800 animate-pulse' : 'bg-blue-600 hover:bg-blue-500'}`}>
@@ -552,7 +564,6 @@ function TexasHoldemAdvisor() {
                      </button>
                      <button onClick={() => setHeroBet(heroStack)} className="flex-1 bg-red-600 hover:bg-red-500 py-2 rounded text-xs text-white">All-In</button>
                   </div>
-                  {/* 修复：替换硬编码的 placeholder */}
                   <input type="number" value={heroBet===0?'':heroBet} onChange={e => handleHeroBetChange(e.target.value)} placeholder={t.bet_placeholder} className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right font-mono"/>
                </div>
             </div>
@@ -629,7 +640,6 @@ function TexasHoldemAdvisor() {
                
                {result.betSizes && (
                  <div>
-                   {/* 修复：添加下注建议标题 */}
                    <div className="text-xs text-slate-500 mb-2 flex items-center gap-1"><MousePointerClick className="w-3 h-3"/> {t.betSizing}</div>
                    <div className="grid grid-cols-3 gap-3 pt-2 border-t border-slate-800/50">
                       <button onClick={() => setHeroBet(result.betSizes.smart)} className="flex flex-col items-center p-2 rounded bg-emerald-900/20 border border-emerald-500/30 hover:bg-emerald-900/40 transition">
@@ -659,7 +669,6 @@ function TexasHoldemAdvisor() {
                <div className="flex justify-between mb-4"><h3 className="font-bold text-white flex items-center gap-2"><Settings className="w-4 h-4"/> {t.game_settings}</h3><button onClick={() => setShowSettings(false)}><X/></button></div>
                <div className="space-y-4">
                   <div>
-                     {/* 修复：替换硬编码的说明文字 */}
                      <label className="block text-sm text-slate-400 mb-2">{t.deck_count}: <span className="text-white font-mono">{deckCount}</span></label>
                      <input type="range" min="1" max="8" value={deckCount} onChange={e => setDeckCount(Number(e.target.value))} className="w-full accent-blue-500"/>
                      <div className="flex justify-between text-xs text-slate-600 font-mono"><span>1</span><span>8</span></div>
@@ -671,8 +680,8 @@ function TexasHoldemAdvisor() {
                      <p className="text-[10px] text-slate-500 mt-1">{t.buy_in_info}</p>
                   </div>
                   <div className="p-3 bg-slate-900 rounded text-xs text-slate-500 border border-slate-700">
-                     <p>GTO Engine v6.3 Active</p>
-                     <p className="mt-1 text-emerald-500">• Fully Localized</p>
+                     <p>GTO Engine v6.4 Active</p>
+                     <p className="mt-1 text-emerald-500">• Flexible Stack Editing</p>
                   </div>
                </div>
             </div>
