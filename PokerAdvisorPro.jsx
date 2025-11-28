@@ -1,4 +1,4 @@
-// 1. 标准 ESM 导入 (对应 index.html 中的 importmap)
+// 1. 标准 ESM 导入
 import React, { useState, useEffect, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
 import { RefreshCw, Trophy, Users, Brain, Info, ArrowRight, Layers, HandMetal, Flame, Skull, Zap, RotateCcw, Settings, X, ShieldCheck, MousePointerClick, Flag, Lightbulb, CheckSquare, CheckCircle } from 'lucide-react';
@@ -13,55 +13,47 @@ const { CONSTANTS, HAND_ANALYSIS_DEFINITIONS, TEXTS } = PokerData;
 const { SUITS, RANKS, RANK_VALUES } = CONSTANTS;
 
 /**
- * 德州扑克助手 Pro (ESM Version)
- * 包含：一键Call、Full House修复、手机端UI优化
+ * 德州扑克助手 Pro (v4.8 - Strategy Update)
+ * 修复：激进模式下，对同花连张/小对子等投机牌的建议逻辑 (引入隐含赔率)
  */
 
 // --- 核心算法 ---
 
-// 牌力评分引擎
 const evaluateHand = (cards) => {
   if (!cards || cards.length < 5) return 0;
-  // 简单排序
   const sorted = [...cards].sort((a, b) => RANK_VALUES[b.rank] - RANK_VALUES[a.rank]);
   const ranks = sorted.map(c => RANK_VALUES[c.rank]);
   const suits = sorted.map(c => c.suit);
   
-  // 统计
   const counts = {};
   ranks.forEach(r => counts[r] = (counts[r] || 0) + 1);
   const countValues = Object.values(counts);
   
-  // 同花
   const suitCounts = {};
   suits.forEach(s => suitCounts[s] = (suitCounts[s] || 0) + 1);
   let flushSuit = Object.keys(suitCounts).find(s => suitCounts[s] >= 5);
   
-  // 顺子
   const uniqueRanks = [...new Set(ranks)].sort((a,b) => b-a);
   let straightHigh = 0;
   for (let i = 0; i <= uniqueRanks.length - 5; i++) {
     if (uniqueRanks[i] - uniqueRanks[i+4] === 4) { straightHigh = uniqueRanks[i]; break; }
   }
-  // A-2-3-4-5
   if (!straightHigh && uniqueRanks.includes(14) && uniqueRanks.includes(2) && uniqueRanks.includes(3) && uniqueRanks.includes(4) && uniqueRanks.includes(5)) straightHigh = 5;
 
   let isFlush = !!flushSuit;
   let isStraight = straightHigh > 0;
 
-  // 判定
-  if (isFlush && isStraight) return 8000000 + straightHigh; // 同花顺
-  if (countValues.includes(4)) return 7000000; // 四条
-  if (countValues.includes(3) && countValues.includes(2)) return 6000000; // 葫芦
-  if (isFlush) return 5000000; // 同花
-  if (isStraight) return 4000000 + straightHigh; // 顺子
-  if (countValues.includes(3)) return 3000000; // 三条
-  if (countValues.filter(c => c === 2).length >= 2) return 2000000; // 两对
-  if (countValues.includes(2)) return 1000000; // 一对
-  return ranks[0]; // 高牌
+  if (isFlush && isStraight) return 8000000 + straightHigh;
+  if (countValues.includes(4)) return 7000000;
+  if (countValues.includes(3) && countValues.includes(2)) return 6000000;
+  if (isFlush) return 5000000;
+  if (isStraight) return 4000000 + straightHigh;
+  if (countValues.includes(3)) return 3000000;
+  if (countValues.filter(c => c === 2).length >= 2) return 2000000;
+  if (countValues.includes(2)) return 1000000;
+  return ranks[0];
 };
 
-// 手牌特征分析器
 const analyzeHandFeatures = (heroCards, communityCards) => {
   if (!heroCards[0] || !heroCards[1]) return null;
   
@@ -72,7 +64,7 @@ const analyzeHandFeatures = (heroCards, communityCards) => {
   const isPair = h1 === h2;
   const isSuited = heroCards[0].suit === heroCards[1].suit;
 
-  // 1. 翻牌前 (Pre-flop)
+  // 1. Pre-flop
   const board = communityCards.filter(Boolean);
   if (board.length === 0) {
       if (isPair) {
@@ -83,31 +75,27 @@ const analyzeHandFeatures = (heroCards, communityCards) => {
       if (h1 >= 13 && h2 >= 12) return "pre_premium_high"; // AK/AQ
       if (isSuited) {
           if (h1 === 14) return "pre_suited_ace";
-          if (h1 - h2 === 1 && h1 <= 11) return "pre_suited_connector";
+          // 修复：放宽连张检测，支持 2s3s (rank 2,3)
+          if ((h1 - h2 === 1) || (h1 - h2 === 2)) return "pre_suited_connector"; // 连张或隔一张
           if (h1 >= 10 && h2 >= 10) return "pre_broadway";
       }
       if (h1 >= 10 && h2 >= 10) return "pre_broadway";
       return "pre_trash";
   }
 
-  // 2. 翻牌后 (Post-flop)
+  // 2. Post-flop
   const allCards = [...heroCards, ...board];
   const isRiver = board.length === 5;
-  
-  // 利用 evaluateHand 获取大牌型
   const score = evaluateHand(allCards);
   
-  // 优先级 1: 成牌 (Made Hands)
   if (score >= 8000000) return "made_straight_flush";
   if (score >= 7000000) return "made_quads";
   if (score >= 6000000) return "made_full_house"; 
   if (score >= 5000000) return "made_flush";
   if (score >= 4000000) return "made_straight";
-  if (score >= 3000000) return "monster"; // 三条
+  if (score >= 3000000) return "monster";
 
-  // 优先级 2: 听牌 (仅当不是河牌时)
   if (!isRiver) {
-      // 简易听牌检测
       const suits = {};
       const ranks = [];
       allCards.forEach(c => {
@@ -119,7 +107,6 @@ const analyzeHandFeatures = (heroCards, communityCards) => {
       let isFlushDraw = !!fdSuit;
       let isNutFD = isFlushDraw && ((heroCards[0].suit === fdSuit && h1_rank === 14) || (heroCards[1].suit === fdSuit && h2_rank === 14));
       
-      // 顺子听牌
       const uRanks = [...new Set(ranks)].sort((a,b)=>a-b);
       let isStraightDraw = false;
       for(let i=0; i<=uRanks.length-4; i++) {
@@ -132,24 +119,21 @@ const analyzeHandFeatures = (heroCards, communityCards) => {
       if (isStraightDraw) return "straight_draw_oesd";
   }
 
-  // 优先级 3: 对子 (Pairs)
   const boardRanks = board.map(c => RANK_VALUES[c.rank]).sort((a,b)=>b-a);
   const maxBoard = boardRanks[0];
   
-  if (score >= 2000000) return "top_pair"; // 两对算强牌
+  if (score >= 2000000) return "top_pair"; 
   if (score >= 1000000) {
-      // 只有一对，判断是不是顶对
       const pairRank = Math.floor((score - 1000000) / 100);
-      if (pairRank > maxBoard) return "pocket_pair_below"; // 实际上是超对，暂且这样归类，可以优化
+      if (pairRank > maxBoard) return "pocket_pair_below"; 
       if (pairRank === maxBoard) return "top_pair";
       if (pairRank > boardRanks[boardRanks.length-1]) return "middle_pair";
       return "bottom_pair";
   }
 
-  return "overcards"; // 默认
+  return "overcards";
 };
 
-// UI 组件: 扑克牌图标
 const CardIcon = ({ rank, suit }) => {
   const isRed = suit === 'h' || suit === 'd';
   const suitSymbol = { s: '♠', h: '♥', d: '♦', c: '♣' }[suit];
@@ -167,16 +151,13 @@ function TexasHoldemAdvisor() {
   const [strategy, setStrategy] = useState('conservative'); 
   const [showSettings, setShowSettings] = useState(false);
   
-  // Game Config
   const [deckCount, setDeckCount] = useState(1);
   const [buyInAmount, setBuyInAmount] = useState(1000);
   
-  // Game State
   const [street, setStreet] = useState(0); 
   const [heroHand, setHeroHand] = useState([null, null]);
   const [communityCards, setCommunityCards] = useState([null, null, null, null, null]);
   
-  // Chips
   const [heroStack, setHeroStack] = useState(1000); 
   const [heroBet, setHeroBet] = useState(0);
   const [heroTotalContributed, setHeroTotalContributed] = useState(0); 
@@ -196,7 +177,6 @@ function TexasHoldemAdvisor() {
 
   const t = TEXTS[lang] || TEXTS['zh'];
 
-  // Derived
   const currentOpponentBets = players.reduce((sum, p) => sum + p.bet, 0); 
   const totalPot = mainPot + currentOpponentBets + heroBet;
   const maxBet = Math.max(heroBet, ...players.map(p => p.bet));
@@ -204,7 +184,6 @@ function TexasHoldemAdvisor() {
   const currentStack = heroStack - heroBet; 
   const spr = currentStack > 0 && totalPot > 0 ? (currentStack / totalPot).toFixed(2) : '∞';
 
-  // --- Call Button Logic (一键 Call) ---
   const handleCall = () => {
     const maxOppBet = Math.max(0, ...players.map(p => p.bet));
     const safeAmount = Math.min(maxOppBet, heroStack);
@@ -213,7 +192,6 @@ function TexasHoldemAdvisor() {
   const isCallAction = maxBet > heroBet;
   const isCallAllIn = isCallAction && (maxBet >= heroStack);
 
-  // --- Core Calculation ---
   const calculateEquity = () => {
     if (heroHand.some(c => c === null)) return;
     setIsCalculating(true);
@@ -264,7 +242,6 @@ function TexasHoldemAdvisor() {
 
       const equity = ((wins + (ties/2)) / SIMULATIONS) * 100;
       
-      // 生成建议
       const potOdds = totalPot > 0 ? (callAmount / (totalPot + callAmount)) * 100 : 0;
       const analysisKey = analyzeHandFeatures(heroHand, communityCards);
       const analysisData = analysisKey ? HAND_ANALYSIS_DEFINITIONS[lang][analysisKey] : null;
@@ -272,26 +249,42 @@ function TexasHoldemAdvisor() {
       let adviceKey = 'advice_fold';
       let reasonKey = ''; 
       
-      // 简单策略逻辑
+      // --- ★★★ 核心策略修正 (v4.8) ★★★ ---
+      // 1. 基础胜率判断
       if (equity > 70) adviceKey = 'advice_raise';
-      else if (equity > potOdds * 1.2) adviceKey = 'advice_call';
+      else if (equity > potOdds * 1.1) adviceKey = 'advice_call';
       else adviceKey = 'advice_fold';
 
-      // 调整策略模式
+      // 2. 激进模式调整 (Bluff)
       if (strategy === 'maniac' && equity > 20) adviceKey = 'advice_raise_bluff';
+      if (strategy === 'aggressive' && equity > 30 && callAmount === 0) adviceKey = 'advice_raise'; // 没下注就偷
+
+      // 3. 投机牌 + 深筹码逻辑 (Implied Odds)
+      // 如果你是激进/疯鱼模式，或者筹码很深，允许玩投机牌
+      const isSpeculativeHand = ['pre_suited_connector', 'pre_suited_ace', 'pre_small_pair'].includes(analysisKey);
+      const isDeepStack = callAmount > 0 && (heroStack / callAmount > 15); // 还有15倍以上的后手
+      
+      // 如果是投机牌，且 (策略激进 或 筹码深)，且没有面临全压 -> 强制建议入局
+      if (isSpeculativeHand && (strategy !== 'conservative' || isDeepStack) && callAmount < heroStack * 0.2) {
+          // 如果胜率太低(比如<25%)就Call，稍微高点就Raise
+          adviceKey = equity > 35 ? 'advice_raise' : 'advice_call';
+      }
 
       let finalAdvice = t[adviceKey];
       let finalReason = `Pot Odds: ${potOdds.toFixed(1)}%`;
 
       if (analysisData) {
          finalReason = analysisData.reason;
-         // 强力牌覆盖建议
+         // 强力牌永远听从分析建议
          if (analysisKey.startsWith('made_') || analysisKey === 'monster' || analysisKey === 'pre_monster_pair') {
              finalAdvice = analysisData.advice;
          }
+         // 投机牌如果被上述逻辑修正了，添加说明
+         if (isSpeculativeHand && adviceKey.includes('call')) {
+             finalReason = `${analysisData.reason} (深筹码隐含赔率优秀，建议入局)`;
+         }
       }
 
-      // Bet Sizes
       let betSizes = null;
       if (adviceKey.includes('raise') || adviceKey.includes('allin')) {
          const p = totalPot, s = heroStack;
@@ -311,7 +304,6 @@ function TexasHoldemAdvisor() {
     }, 50);
   };
 
-  // --- Handlers ---
   const handleHeroBetChange = (val) => setHeroBet(val === '' ? 0 : Math.min(Number(val), heroStack));
   const handleStackChange = (val) => setHeroStack(val === '' ? 0 : Math.max(0, Number(val)));
   const handleOpponentBetChange = (id, val) => setPlayers(players.map(p => p.id === id ? { ...p, bet: val === '' ? 0 : Number(val) } : p));
@@ -362,7 +354,6 @@ function TexasHoldemAdvisor() {
   const unavailableCards = useMemo(() => [...heroHand, ...communityCards].filter(Boolean), [heroHand, communityCards]);
   const handleCardClick = (type, index) => setSelectingFor({ type, index });
 
-  // Get Strategy UI
   const getStrategyStyle = () => {
     switch(strategy) {
       case 'maniac': return 'bg-purple-900/50 text-purple-400 border-purple-800';
@@ -413,7 +404,6 @@ function TexasHoldemAdvisor() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-10">
-      {/* Header */}
       <div className="bg-slate-900 border-b border-slate-800 p-4 sticky top-0 z-30 shadow-md flex justify-between items-center">
          <div className="flex items-center gap-2 text-emerald-500 font-bold"><Trophy className="w-5 h-5"/> {t.appTitle}</div>
          <div className="flex gap-2">
@@ -424,7 +414,6 @@ function TexasHoldemAdvisor() {
       </div>
 
       <div className="max-w-xl mx-auto p-4 space-y-6">
-         {/* Pot Info */}
          <div className="bg-slate-900 rounded-2xl p-4 border border-slate-800 grid grid-cols-2 gap-4">
             <div>
                <div className="text-xs text-slate-500">{t.mainPot}</div>
@@ -438,7 +427,6 @@ function TexasHoldemAdvisor() {
             </div>
          </div>
 
-         {/* Board */}
          <div className="space-y-2">
           <div className="flex justify-between items-center px-1">
              <span className="text-xs font-bold text-slate-400 uppercase">{t[`street_${['pre','flop','turn','river'][street]}`]}</span>
@@ -453,7 +441,6 @@ function TexasHoldemAdvisor() {
           </div>
         </div>
 
-         {/* Hero & Actions */}
          <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
             <div className="flex gap-4 mb-4">
                {heroHand.map((c, i) => (
@@ -463,30 +450,24 @@ function TexasHoldemAdvisor() {
                ))}
                <div className="flex-1 space-y-2">
                   <div className="flex justify-between text-xs text-slate-400"><span>{t.heroStack}</span><span>{heroStack}</span></div>
-                  
-                  {/* --- ★★★ 手机端 UI 修复: 独立按钮行 ★★★ --- */}
                   <div className="flex gap-2">
                      <button onClick={() => setHeroBet(0)} className="flex-1 bg-slate-600 hover:bg-slate-500 py-2 rounded text-xs flex items-center justify-center gap-1 text-slate-200"><Flag className="w-3 h-3"/> {t.btn_fold}</button>
-                     
                      <button onClick={handleCall} className={`flex-1 py-2 rounded text-xs flex items-center justify-center gap-1 text-white ${isCallAllIn ? 'bg-red-800 animate-pulse' : 'bg-blue-600 hover:bg-blue-500'}`}>
                         {isCallAction ? <CheckSquare className="w-3 h-3"/> : <CheckCircle className="w-3 h-3"/>}
                         {isCallAction ? (isCallAllIn ? 'All-In' : 'Call') : 'Check'}
                      </button>
-                     
                      <button onClick={() => setHeroBet(heroStack)} className="flex-1 bg-red-600 hover:bg-red-500 py-2 rounded text-xs flex items-center justify-center gap-1 text-white"><Zap className="w-3 h-3"/> All-In</button>
                   </div>
-
                   <input type="number" value={heroBet===0?'':heroBet} onChange={e => handleHeroBetChange(e.target.value)} placeholder="0" className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-right font-mono"/>
                </div>
             </div>
          </div>
 
-         {/* Opponents */}
          <div className="space-y-2">
             <div className="flex justify-between items-center px-1"><span className="text-xs font-bold text-slate-400">Opponents</span><button onClick={() => setPlayers([...players, {id: Date.now(), bet: 0, totalContributed: 0, active: true}])} className="text-[10px] bg-slate-800 border border-slate-600 px-2 py-0.5 rounded text-slate-300">+ Add</button></div>
             {players.map((p, idx) => (
                <div key={p.id} className={`flex items-center gap-3 bg-slate-800 p-2 rounded-lg border ${p.active ? 'border-slate-700' : 'opacity-50 border-transparent'}`}>
-                  <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-400">{idx+1}</div>
+                  <div className="w-6 h-6 rounded-full bg-slate-600 flex items-center justify-center text-xs font-bold text-slate-400">{idx+1}</div>
                   <div className="flex-1 grid grid-cols-2 gap-2">
                      <button onClick={() => { const n = [...players]; n[idx].active = !n[idx].active; setPlayers(n); }} className={`text-xs rounded py-1 ${p.active ? 'bg-emerald-900/30 text-emerald-400' : 'bg-slate-700 text-slate-500'}`}>{p.active ? t.active : t.folded}</button>
                      <div className="flex items-center bg-slate-900 rounded px-2 border border-slate-700"><span className="text-xs text-slate-500">$</span><input type="number" value={p.bet===0?'':p.bet} placeholder="0" onChange={e => handleOpponentBetChange(p.id, e.target.value)} className="w-full bg-transparent text-white text-sm py-1 font-mono focus:outline-none" /></div>
@@ -496,7 +477,6 @@ function TexasHoldemAdvisor() {
             ))}
          </div>
 
-         {/* Result */}
          {!settlementMode ? (
           <button onClick={calculateEquity} disabled={isCalculating} className="w-full font-bold py-4 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-lg flex justify-center items-center gap-2 hover:brightness-110 active:scale-95 transition">
             {isCalculating ? <RefreshCw className="animate-spin w-5 h-5"/> : <Brain className="w-5 h-5"/>} {t.calculate}
