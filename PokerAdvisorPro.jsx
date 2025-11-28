@@ -18,8 +18,8 @@ const { CONSTANTS, HAND_ANALYSIS_DEFINITIONS, TEXTURE_STRATEGIES, POSITIONS, BOA
 const { SUITS, RANKS, RANK_VALUES } = CONSTANTS;
 
 /**
- * 德州扑克助手 Pro (v6.1 - Restored & Enhanced)
- * 修复：找回所有丢失功能（对手、语言、设置），同时保留 v6.0 的 GTO 引擎
+ * 德州扑克助手 Pro (v6.2 - UX Polish)
+ * 修复：转牌(Turn)选完后不再自动跳到河牌，优化选牌器自动关闭逻辑
  */
 
 // --- 核心算法 ---
@@ -432,13 +432,18 @@ function TexasHoldemAdvisor() {
                    const takenCount = unavailableCards.filter(c => c.rank === rank && c.suit === suit).length;
                    return (<button key={rank+suit} disabled={takenCount >= deckCount} onClick={() => {
                        const card = { rank, suit };
+                       let nextState = null;
+                       
                        if (selectingFor.type === 'hero') {
                          const h = [...heroHand]; h[selectingFor.index] = card; setHeroHand(h);
-                         setSelectingFor(selectingFor.index === 0 ? {type:'hero', index:1} : null);
+                         if (selectingFor.index === 0) nextState = {type:'hero', index:1};
                        } else {
                          const b = [...communityCards]; b[selectingFor.index] = card; setCommunityCards(b);
-                         setSelectingFor(selectingFor.index < 4 ? {type:'board', index: selectingFor.index+1} : null);
+                         // 修复逻辑：只有翻牌圈(Index < 2)才自动跳转，Turn(3)和River(4)选完即停
+                         if (selectingFor.index < 2) nextState = {type:'board', index: selectingFor.index+1};
                        }
+                       
+                       setSelectingFor(nextState);
                      }} className={`p-1 rounded flex justify-center hover:bg-slate-700 ${takenCount >= deckCount ? 'opacity-20 cursor-not-allowed' : ''}`}><CardIcon rank={rank} suit={suit} /></button>);
                  })}
                </div>
@@ -451,13 +456,11 @@ function TexasHoldemAdvisor() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-10">
-      {/* Header (Restored Language Switch) */}
       <div className="bg-slate-900 border-b border-slate-800 p-4 sticky top-0 z-30 shadow-md flex justify-between items-center">
-         <div className="flex items-center gap-2 text-emerald-500 font-bold"><Trophy className="w-5 h-5"/> {t.appTitle} <span className="text-[10px] bg-slate-800 px-1 rounded text-slate-500">v6.1</span></div>
+         <div className="flex items-center gap-2 text-emerald-500 font-bold"><Trophy className="w-5 h-5"/> {t.appTitle} <span className="text-[10px] bg-slate-800 px-1 rounded text-slate-500">v6.2</span></div>
          <div className="flex gap-2">
             <button onClick={() => setStrategy(s => s==='conservative'?'aggressive':s==='aggressive'?'maniac':'conservative')} className={`px-3 py-1.5 rounded-full border flex gap-1 items-center text-xs ${getStrategyStyle()}`}>{strategy==='maniac'&&<Flame className="w-3 h-3"/>}{getStrategyLabel()}</button>
             <button onClick={() => setShowSettings(true)} className="p-2 bg-slate-800 rounded-full border border-slate-700"><Settings className="w-4 h-4"/></button>
-            {/* 修复：恢复中英切换 */}
             <button onClick={() => setLang(l => l==='zh'?'en':'zh')} className="px-3 py-1 bg-slate-800 rounded-full border border-slate-700 text-xs">{lang==='zh'?'EN':'中'}</button>
          </div>
       </div>
@@ -523,7 +526,6 @@ function TexasHoldemAdvisor() {
             </div>
          </div>
 
-         {/* 修复：恢复对手列表 (Opponents Section) */}
          <div className="space-y-2">
             <div className="flex justify-between items-center px-1"><span className="text-xs font-bold text-slate-400">Opponents</span><button onClick={() => setPlayers([...players, {id: Date.now(), bet: 0, totalContributed: 0, active: true}])} className="text-[10px] bg-slate-800 border border-slate-600 px-2 py-0.5 rounded text-slate-300">+ {t.add_player}</button></div>
             {players.map((p, idx) => (
@@ -538,7 +540,6 @@ function TexasHoldemAdvisor() {
             ))}
          </div>
 
-         {/* Action Button */}
          {!settlementMode ? (
             <button onClick={calculateEquity} disabled={isCalculating} className="w-full font-bold py-4 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-lg flex justify-center items-center gap-2 hover:brightness-110 active:scale-95 transition">
               {isCalculating ? <RefreshCw className="animate-spin w-5 h-5"/> : <Brain className="w-5 h-5"/>} {t.calculate}
@@ -560,7 +561,6 @@ function TexasHoldemAdvisor() {
             </div>
          )}
 
-         {/* Result Panel (GTO Enhanced) */}
          {result && !settlementMode && (
           <div className={`border rounded-xl overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500 ${result.isBluff ? 'bg-purple-900/20 border-purple-500/50' : 'bg-slate-900 border-slate-700'}`}>
              <div className="p-4 bg-slate-800/50 border-b border-slate-800 flex justify-between items-center">
@@ -627,14 +627,13 @@ function TexasHoldemAdvisor() {
                      <input type="range" min="1" max="8" value={deckCount} onChange={e => setDeckCount(Number(e.target.value))} className="w-full accent-blue-500"/>
                      <div className="flex justify-between text-xs text-slate-600 font-mono"><span>1</span><span>8</span></div>
                   </div>
-                  {/* 修复：恢复买入设置 */}
                   <div>
                      <label className="block text-sm text-slate-400 mb-2">{t.buy_in_amount}</label>
                      <div className="flex items-center bg-slate-900 rounded border border-slate-700"><span className="px-3 text-slate-500">$</span><input type="number" value={buyInAmount} onChange={e => setBuyInAmount(Number(e.target.value))} className="w-full bg-transparent py-2 text-white font-mono focus:outline-none"/></div>
                   </div>
                   <div className="p-3 bg-slate-900 rounded text-xs text-slate-500 border border-slate-700">
-                     <p>GTO Engine v6.1 Active</p>
-                     <p className="mt-1 text-emerald-500">• All Features Restored</p>
+                     <p>GTO Engine v6.2 Active</p>
+                     <p className="mt-1 text-emerald-500">• Smart Card Selector</p>
                   </div>
                </div>
             </div>
