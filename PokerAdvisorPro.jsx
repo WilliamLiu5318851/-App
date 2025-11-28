@@ -1,24 +1,26 @@
 // 1. 标准 ESM 导入
 import React, { useState, useEffect, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
-import { RefreshCw, Trophy, Users, Brain, Info, ArrowRight, Layers, HandMetal, Flame, Skull, Zap, RotateCcw, Settings, X, ShieldCheck, MousePointerClick, Flag, Lightbulb, CheckSquare, CheckCircle } from 'lucide-react';
+import { RefreshCw, Trophy, Users, Brain, Info, ArrowRight, Layers, HandMetal, Flame, Skull, Zap, RotateCcw, Settings, X, ShieldCheck, MousePointerClick, Flag, Lightbulb, CheckSquare, CheckCircle, Grid } from 'lucide-react';
 
 // 2. 从 PokerData.js 安全获取数据
 const PokerData = window.PokerData || { 
   CONSTANTS: { SUITS: [], RANKS: [], RANK_VALUES: {}, STREETS: [] },
   HAND_ANALYSIS_DEFINITIONS: { zh: {}, en: {} },
+  TEXTURE_STRATEGIES: {},
   TEXTS: { zh: {}, en: {} }
 };
-const { CONSTANTS, HAND_ANALYSIS_DEFINITIONS, TEXTS } = PokerData;
+const { CONSTANTS, HAND_ANALYSIS_DEFINITIONS, TEXTURE_STRATEGIES, TEXTS } = PokerData;
 const { SUITS, RANKS, RANK_VALUES } = CONSTANTS;
 
 /**
- * 德州扑克助手 Pro (v4.8 - Strategy Update)
- * 修复：激进模式下，对同花连张/小对子等投机牌的建议逻辑 (引入隐含赔率)
+ * 德州扑克助手 Pro (v5.0 - Data Driven & SF Fix)
+ * 核心升级：同花顺/同花坚果检测、牌面纹理分析
  */
 
 // --- 核心算法 ---
 
+// 牌力评分引擎 (返回 8,000,000+ 分数代表牌型强度)
 const evaluateHand = (cards) => {
   if (!cards || cards.length < 5) return 0;
   const sorted = [...cards].sort((a, b) => RANK_VALUES[b.rank] - RANK_VALUES[a.rank]);
@@ -43,10 +45,11 @@ const evaluateHand = (cards) => {
   let isFlush = !!flushSuit;
   let isStraight = straightHigh > 0;
 
-  if (isFlush && isStraight) return 8000000 + straightHigh;
+  // 注意：这里返回 High Card 用于后续坚果判断
+  if (isFlush && isStraight) return 8000000 + straightHigh; 
   if (countValues.includes(4)) return 7000000;
   if (countValues.includes(3) && countValues.includes(2)) return 6000000;
-  if (isFlush) return 5000000;
+  if (isFlush) return 5000000; // 同花需要进一步比大小，暂且只返回大类
   if (isStraight) return 4000000 + straightHigh;
   if (countValues.includes(3)) return 3000000;
   if (countValues.filter(c => c === 2).length >= 2) return 2000000;
@@ -54,6 +57,37 @@ const evaluateHand = (cards) => {
   return ranks[0];
 };
 
+// 牌面纹理分析器
+const analyzeBoardTexture = (communityCards) => {
+  const board = communityCards.filter(Boolean);
+  if (board.length < 3) return null;
+
+  const suits = {};
+  const ranks = [];
+  board.forEach(c => {
+    suits[c.suit] = (suits[c.suit] || 0) + 1;
+    ranks.push(RANK_VALUES[c.rank]);
+  });
+  
+  const maxSuitCount = Math.max(...Object.values(suits));
+  const uniqueRanks = [...new Set(ranks)].sort((a,b)=>a-b);
+  const rankSet = new Set(ranks);
+  const isPaired = ranks.length !== uniqueRanks.length;
+
+  // 连张检测
+  let isConnected = false;
+  for(let i=0; i<=uniqueRanks.length-3; i++) {
+      if (uniqueRanks[i+2] - uniqueRanks[i] <= 4) isConnected = true;
+  }
+
+  if (isPaired) return 'TEX_PAIRED';
+  if (maxSuitCount >= 3) return 'TEX_MONOTONE'; // 3张同色
+  if (maxSuitCount === 2) return 'TEX_TWO_TONE'; // 2张同色
+  if (isConnected) return 'TEX_CONNECTED';
+  return 'TEX_RAINBOW_DRY';
+};
+
+// 手牌特征分析器 (v5.0 重构版)
 const analyzeHandFeatures = (heroCards, communityCards) => {
   if (!heroCards[0] || !heroCards[1]) return null;
   
@@ -64,7 +98,7 @@ const analyzeHandFeatures = (heroCards, communityCards) => {
   const isPair = h1 === h2;
   const isSuited = heroCards[0].suit === heroCards[1].suit;
 
-  // 1. Pre-flop
+  // 1. 翻牌前 (Pre-flop)
   const board = communityCards.filter(Boolean);
   if (board.length === 0) {
       if (isPair) {
@@ -75,26 +109,54 @@ const analyzeHandFeatures = (heroCards, communityCards) => {
       if (h1 >= 13 && h2 >= 12) return "pre_premium_high"; // AK/AQ
       if (isSuited) {
           if (h1 === 14) return "pre_suited_ace";
-          // 修复：放宽连张检测，支持 2s3s (rank 2,3)
-          if ((h1 - h2 === 1) || (h1 - h2 === 2)) return "pre_suited_connector"; // 连张或隔一张
+          if ((h1 - h2 <= 2)) return "pre_suited_connector"; // 连张
           if (h1 >= 10 && h2 >= 10) return "pre_broadway";
       }
       if (h1 >= 10 && h2 >= 10) return "pre_broadway";
       return "pre_trash";
   }
 
-  // 2. Post-flop
+  // 2. 翻牌后 (Post-flop)
   const allCards = [...heroCards, ...board];
   const isRiver = board.length === 5;
   const score = evaluateHand(allCards);
-  
-  if (score >= 8000000) return "made_straight_flush";
-  if (score >= 7000000) return "made_quads";
-  if (score >= 6000000) return "made_full_house"; 
-  if (score >= 5000000) return "made_flush";
-  if (score >= 4000000) return "made_straight";
-  if (score >= 3000000) return "monster";
+  const boardRanks = board.map(c => RANK_VALUES[c.rank]).sort((a,b)=>b-a);
+  const maxBoard = boardRanks[0];
 
+  // --- ★★★ 坚果检测逻辑 (Nut Checker) ★★★ ---
+  
+  // 同花顺 (Straight Flush)
+  if (score >= 8000000) {
+      const sfHigh = score - 8000000;
+      // 核心逻辑：如果同花顺的最大牌在公牌上，且不是A，说明可能有更大的
+      // 例如：Hero 2s3s, Board 4s5s6s. SF=2-6. 6s在公牌 -> 7s能赢 -> Vulnerable
+      const topCardRank = sfHigh;
+      const isTopCardOnBoard = boardRanks.includes(topCardRank);
+      
+      if (isTopCardOnBoard && topCardRank < 14) {
+          return "made_straight_flush_lower"; // 危险！
+      }
+      return "made_straight_flush_nuts"; // 坚果！
+  }
+
+  // 四条 & 葫芦
+  if (score >= 7000000) return "made_quads";
+  if (score >= 6000000) return "made_full_house";
+
+  // 同花 (Flush)
+  if (score >= 5000000) {
+      // 简单坚果检测：Hero是否有A花或K花（当A在公牌时）
+      // 这里简化处理：如果有A花就是Nut
+      const flushSuit = heroCards[0].suit; // 假设只有一种花色成花
+      const hasAceFlush = (heroCards[0].suit === flushSuit && h1_rank === 14) || (heroCards[1].suit === flushSuit && h2_rank === 14);
+      return hasAceFlush ? "made_flush_nuts" : "made_flush";
+  }
+
+  // 顺子 & 三条
+  if (score >= 4000000) return "made_straight";
+  if (score >= 3000000) return "monster"; 
+
+  // 听牌 (非河牌)
   if (!isRiver) {
       const suits = {};
       const ranks = [];
@@ -119,10 +181,8 @@ const analyzeHandFeatures = (heroCards, communityCards) => {
       if (isStraightDraw) return "straight_draw_oesd";
   }
 
-  const boardRanks = board.map(c => RANK_VALUES[c.rank]).sort((a,b)=>b-a);
-  const maxBoard = boardRanks[0];
-  
-  if (score >= 2000000) return "top_pair"; 
+  // 对子
+  if (score >= 2000000) return "top_pair"; // 两对
   if (score >= 1000000) {
       const pairRank = Math.floor((score - 1000000) / 100);
       if (pairRank > maxBoard) return "pocket_pair_below"; 
@@ -134,6 +194,7 @@ const analyzeHandFeatures = (heroCards, communityCards) => {
   return "overcards";
 };
 
+// UI 组件
 const CardIcon = ({ rank, suit }) => {
   const isRed = suit === 'h' || suit === 'd';
   const suitSymbol = { s: '♠', h: '♥', d: '♦', c: '♣' }[suit];
@@ -244,45 +305,54 @@ function TexasHoldemAdvisor() {
       
       const potOdds = totalPot > 0 ? (callAmount / (totalPot + callAmount)) * 100 : 0;
       const analysisKey = analyzeHandFeatures(heroHand, communityCards);
+      const textureKey = analyzeBoardTexture(communityCards); // New Texture Analysis
+      
       const analysisData = analysisKey ? HAND_ANALYSIS_DEFINITIONS[lang][analysisKey] : null;
+      const textureData = textureKey ? TEXTURE_STRATEGIES[textureKey] : null;
       
       let adviceKey = 'advice_fold';
       let reasonKey = ''; 
       
-      // --- ★★★ 核心策略修正 (v4.8) ★★★ ---
+      // --- 核心策略修正 (v5.0) ---
+      
       // 1. 基础胜率判断
       if (equity > 70) adviceKey = 'advice_raise';
       else if (equity > potOdds * 1.1) adviceKey = 'advice_call';
       else adviceKey = 'advice_fold';
 
-      // 2. 激进模式调整 (Bluff)
+      // 2. 激进模式调整
       if (strategy === 'maniac' && equity > 20) adviceKey = 'advice_raise_bluff';
-      if (strategy === 'aggressive' && equity > 30 && callAmount === 0) adviceKey = 'advice_raise'; // 没下注就偷
-
-      // 3. 投机牌 + 深筹码逻辑 (Implied Odds)
-      // 如果你是激进/疯鱼模式，或者筹码很深，允许玩投机牌
-      const isSpeculativeHand = ['pre_suited_connector', 'pre_suited_ace', 'pre_small_pair'].includes(analysisKey);
-      const isDeepStack = callAmount > 0 && (heroStack / callAmount > 15); // 还有15倍以上的后手
       
-      // 如果是投机牌，且 (策略激进 或 筹码深)，且没有面临全压 -> 强制建议入局
+      // 3. 深筹码投机覆盖 (同花连张/小对子)
+      const isSpeculativeHand = ['pre_suited_connector', 'pre_suited_ace', 'pre_small_pair'].includes(analysisKey);
+      const isDeepStack = callAmount > 0 && (heroStack / callAmount > 15);
       if (isSpeculativeHand && (strategy !== 'conservative' || isDeepStack) && callAmount < heroStack * 0.2) {
-          // 如果胜率太低(比如<25%)就Call，稍微高点就Raise
           adviceKey = equity > 35 ? 'advice_raise' : 'advice_call';
       }
 
       let finalAdvice = t[adviceKey];
       let finalReason = `Pot Odds: ${potOdds.toFixed(1)}%`;
 
+      // 4. 分析引擎覆盖 (Analyzer Override)
       if (analysisData) {
          finalReason = analysisData.reason;
-         // 强力牌永远听从分析建议
+         // 强力牌(含 Nuts SF) 强制听从
          if (analysisKey.startsWith('made_') || analysisKey === 'monster' || analysisKey === 'pre_monster_pair') {
              finalAdvice = analysisData.advice;
          }
-         // 投机牌如果被上述逻辑修正了，添加说明
-         if (isSpeculativeHand && adviceKey.includes('call')) {
-             finalReason = `${analysisData.reason} (深筹码隐含赔率优秀，建议入局)`;
+         // 特殊情况：低端同花顺 -> 强制警告
+         if (analysisKey === 'made_straight_flush_lower') {
+             finalReason = `🛑 ${analysisData.reason} (Idiot End of SF)`;
          }
+         // 投机牌说明
+         if (isSpeculativeHand && adviceKey.includes('call')) {
+             finalReason = `${analysisData.reason} (Implied Odds OK)`;
+         }
+      }
+
+      // 5. 牌面纹理建议 (Texture Advice)
+      if (textureData && callAmount === 0 && !analysisKey.startsWith('made_')) {
+          finalReason += `\n[${textureData.name}]: ${textureData.desc}`;
       }
 
       let betSizes = null;
@@ -297,6 +367,7 @@ function TexasHoldemAdvisor() {
         advice: finalAdvice,
         reason: finalReason,
         handTypeLabel: analysisData ? analysisData.label : null,
+        textureLabel: textureData ? textureData.name : null, // Display texture
         betSizes,
         isBluff: adviceKey.includes('bluff')
       });
@@ -503,8 +574,11 @@ function TexasHoldemAdvisor() {
              <div className="p-4 bg-slate-800/50 border-b border-slate-800 flex justify-between items-center">
                 <div>
                    <h2 className={`text-2xl font-bold ${result.isBluff ? 'text-purple-400 animate-pulse' : result.advice.includes('Fold') ? 'text-red-400' : 'text-emerald-400'}`}>{result.advice}</h2>
-                   {result.handTypeLabel && <div className="mt-1 inline-block"><span className="text-xs bg-slate-700 px-2 py-0.5 rounded text-blue-200 border border-blue-500/30 flex items-center gap-1"><Lightbulb className="w-3 h-3"/> {result.handTypeLabel}</span></div>}
-                   <p className="text-xs text-slate-400 mt-1">{result.reason}</p>
+                   <div className="mt-1 flex flex-wrap gap-1">
+                      {result.handTypeLabel && <span className="text-xs bg-slate-700 px-2 py-0.5 rounded text-blue-200 border border-blue-500/30 flex items-center gap-1"><Lightbulb className="w-3 h-3"/> {result.handTypeLabel}</span>}
+                      {result.textureLabel && <span className="text-xs bg-slate-700 px-2 py-0.5 rounded text-indigo-200 border border-indigo-500/30 flex items-center gap-1"><Grid className="w-3 h-3"/> {result.textureLabel}</span>}
+                   </div>
+                   <p className="text-xs text-slate-400 mt-1 whitespace-pre-wrap">{result.reason}</p>
                 </div>
                 <div className="text-right"><div className="text-3xl font-bold text-white">{result.equity}%</div><div className="text-xs text-slate-500">{t.equity}</div></div>
              </div>
