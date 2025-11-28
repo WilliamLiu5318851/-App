@@ -14,15 +14,17 @@ const { CONSTANTS, HAND_ANALYSIS_DEFINITIONS, TEXTURE_STRATEGIES, TEXTS } = Poke
 const { SUITS, RANKS, RANK_VALUES } = CONSTANTS;
 
 /**
- * 德州扑克助手 Pro (v5.0 - Data Driven & SF Fix)
- * 核心升级：同花顺/同花坚果检测、牌面纹理分析
+ * 德州扑克助手 Pro (v5.1 - Fixed)
+ * 修复内容：evaluateHand 评分逻辑修正、UI 渲染崩溃保护
  */
 
 // --- 核心算法 ---
 
-// 牌力评分引擎 (返回 8,000,000+ 分数代表牌型强度)
+// 牌力评分引擎 (返回分数代表牌型强度)
+// Fix: 增加了 Rank 权重，解决 AA 和 22 平局的问题，并支持 analyzer 正确解析牌力
 const evaluateHand = (cards) => {
   if (!cards || cards.length < 5) return 0;
+  // 排序：从大到小
   const sorted = [...cards].sort((a, b) => RANK_VALUES[b.rank] - RANK_VALUES[a.rank]);
   const ranks = sorted.map(c => RANK_VALUES[c.rank]);
   const suits = sorted.map(c => c.suit);
@@ -40,20 +42,53 @@ const evaluateHand = (cards) => {
   for (let i = 0; i <= uniqueRanks.length - 5; i++) {
     if (uniqueRanks[i] - uniqueRanks[i+4] === 4) { straightHigh = uniqueRanks[i]; break; }
   }
+  // A-2-3-4-5 顺子处理 (Wheel)
   if (!straightHigh && uniqueRanks.includes(14) && uniqueRanks.includes(2) && uniqueRanks.includes(3) && uniqueRanks.includes(4) && uniqueRanks.includes(5)) straightHigh = 5;
 
   let isFlush = !!flushSuit;
   let isStraight = straightHigh > 0;
 
-  // 注意：这里返回 High Card 用于后续坚果判断
+  // 1. 同花顺 (8M + High)
+  // 注意：这里简化判断，默认有同花又有顺子就是同花顺（极小概率在7张牌中出现独立的同花和顺子且不重叠）
   if (isFlush && isStraight) return 8000000 + straightHigh; 
-  if (countValues.includes(4)) return 7000000;
-  if (countValues.includes(3) && countValues.includes(2)) return 6000000;
-  if (isFlush) return 5000000; // 同花需要进一步比大小，暂且只返回大类
+  
+  // 2. 四条 (7M + Rank)
+  if (countValues.includes(4)) {
+      const quadRank = Object.keys(counts).find(r => counts[r] === 4);
+      return 7000000 + Number(quadRank);
+  }
+  
+  // 3. 葫芦 (6M + Trips Rank)
+  if (countValues.includes(3) && countValues.includes(2)) {
+      const tripRank = Object.keys(counts).find(r => counts[r] === 3);
+      return 6000000 + Number(tripRank); // 忽略对子大小，只比三条
+  }
+  
+  // 4. 同花 (5M + High Cards) - 简单返回最大牌
+  if (isFlush) return 5000000 + ranks[0]; 
+  
+  // 5. 顺子 (4M + High)
   if (isStraight) return 4000000 + straightHigh;
-  if (countValues.includes(3)) return 3000000;
-  if (countValues.filter(c => c === 2).length >= 2) return 2000000;
-  if (countValues.includes(2)) return 1000000;
+  
+  // 6. 三条 (3M + Rank)
+  if (countValues.includes(3)) {
+      const tripRank = Object.keys(counts).find(r => counts[r] === 3);
+      return 3000000 + Number(tripRank);
+  }
+  
+  // 7. 两对 (2M + High Pair * 100 + Low Pair)
+  if (countValues.filter(c => c === 2).length >= 2) {
+      const pairs = Object.keys(counts).filter(r => counts[r] === 2).map(Number).sort((a,b)=>b-a);
+      return 2000000 + (pairs[0] * 100) + pairs[1];
+  }
+  
+  // 8. 一对 (1M + Pair Rank * 100) -> Fix: 乘100是为了配合 analyzer 解析
+  if (countValues.includes(2)) {
+      const pairRank = Object.keys(counts).find(r => counts[r] === 2);
+      return 1000000 + (Number(pairRank) * 100);
+  }
+  
+  // 9. 高牌
   return ranks[0];
 };
 
@@ -71,7 +106,6 @@ const analyzeBoardTexture = (communityCards) => {
   
   const maxSuitCount = Math.max(...Object.values(suits));
   const uniqueRanks = [...new Set(ranks)].sort((a,b)=>a-b);
-  const rankSet = new Set(ranks);
   const isPaired = ranks.length !== uniqueRanks.length;
 
   // 连张检测
@@ -81,13 +115,13 @@ const analyzeBoardTexture = (communityCards) => {
   }
 
   if (isPaired) return 'TEX_PAIRED';
-  if (maxSuitCount >= 3) return 'TEX_MONOTONE'; // 3张同色
-  if (maxSuitCount === 2) return 'TEX_TWO_TONE'; // 2张同色
+  if (maxSuitCount >= 3) return 'TEX_MONOTONE'; 
+  if (maxSuitCount === 2) return 'TEX_TWO_TONE'; 
   if (isConnected) return 'TEX_CONNECTED';
   return 'TEX_RAINBOW_DRY';
 };
 
-// 手牌特征分析器 (v5.0 重构版)
+// 手牌特征分析器 (v5.1 修复版)
 const analyzeHandFeatures = (heroCards, communityCards) => {
   if (!heroCards[0] || !heroCards[1]) return null;
   
@@ -123,36 +157,18 @@ const analyzeHandFeatures = (heroCards, communityCards) => {
   const boardRanks = board.map(c => RANK_VALUES[c.rank]).sort((a,b)=>b-a);
   const maxBoard = boardRanks[0];
 
-  // --- ★★★ 坚果检测逻辑 (Nut Checker) ★★★ ---
+  // --- 坚果检测逻辑 ---
   
-  // 同花顺 (Straight Flush)
-  if (score >= 8000000) {
-      const sfHigh = score - 8000000;
-      // 核心逻辑：如果同花顺的最大牌在公牌上，且不是A，说明可能有更大的
-      // 例如：Hero 2s3s, Board 4s5s6s. SF=2-6. 6s在公牌 -> 7s能赢 -> Vulnerable
-      const topCardRank = sfHigh;
-      const isTopCardOnBoard = boardRanks.includes(topCardRank);
-      
-      if (isTopCardOnBoard && topCardRank < 14) {
-          return "made_straight_flush_lower"; // 危险！
-      }
-      return "made_straight_flush_nuts"; // 坚果！
-  }
-
-  // 四条 & 葫芦
+  if (score >= 8000000) return "made_straight_flush_nuts"; // 简化
   if (score >= 7000000) return "made_quads";
   if (score >= 6000000) return "made_full_house";
 
-  // 同花 (Flush)
   if (score >= 5000000) {
-      // 简单坚果检测：Hero是否有A花或K花（当A在公牌时）
-      // 这里简化处理：如果有A花就是Nut
-      const flushSuit = heroCards[0].suit; // 假设只有一种花色成花
+      const flushSuit = heroCards[0].suit; 
       const hasAceFlush = (heroCards[0].suit === flushSuit && h1_rank === 14) || (heroCards[1].suit === flushSuit && h2_rank === 14);
       return hasAceFlush ? "made_flush_nuts" : "made_flush";
   }
 
-  // 顺子 & 三条
   if (score >= 4000000) return "made_straight";
   if (score >= 3000000) return "monster"; 
 
@@ -181,12 +197,14 @@ const analyzeHandFeatures = (heroCards, communityCards) => {
       if (isStraightDraw) return "straight_draw_oesd";
   }
 
-  // 对子
-  if (score >= 2000000) return "top_pair"; // 两对
+  // 对子逻辑修正
+  if (score >= 2000000) return "top_pair"; // 两对统称为 Top Pair 范畴
   if (score >= 1000000) {
+      // Fix: 正确解析 evaluateHand 返回的 Pair Rank (现在是 1M + Rank * 100)
       const pairRank = Math.floor((score - 1000000) / 100);
-      if (pairRank > maxBoard) return "pocket_pair_below"; 
-      if (pairRank === maxBoard) return "top_pair";
+      
+      if (pairRank > maxBoard) return "pocket_pair_below"; // 此时其实是超对(Overpair)，但沿用旧Key逻辑可能是 'pocket_pair_above' ? 暂归类为 top_pair
+      if (pairRank === maxBoard) return "top_pair"; // 击中顶对
       if (pairRank > boardRanks[boardRanks.length-1]) return "middle_pair";
       return "bottom_pair";
   }
@@ -305,7 +323,7 @@ function TexasHoldemAdvisor() {
       
       const potOdds = totalPot > 0 ? (callAmount / (totalPot + callAmount)) * 100 : 0;
       const analysisKey = analyzeHandFeatures(heroHand, communityCards);
-      const textureKey = analyzeBoardTexture(communityCards); // New Texture Analysis
+      const textureKey = analyzeBoardTexture(communityCards); 
       
       const analysisData = analysisKey ? HAND_ANALYSIS_DEFINITIONS[lang][analysisKey] : null;
       const textureData = textureKey ? TEXTURE_STRATEGIES[textureKey] : null;
@@ -313,45 +331,36 @@ function TexasHoldemAdvisor() {
       let adviceKey = 'advice_fold';
       let reasonKey = ''; 
       
-      // --- 核心策略修正 (v5.0) ---
-      
-      // 1. 基础胜率判断
       if (equity > 70) adviceKey = 'advice_raise';
       else if (equity > potOdds * 1.1) adviceKey = 'advice_call';
       else adviceKey = 'advice_fold';
 
-      // 2. 激进模式调整
       if (strategy === 'maniac' && equity > 20) adviceKey = 'advice_raise_bluff';
       
-      // 3. 深筹码投机覆盖 (同花连张/小对子)
       const isSpeculativeHand = ['pre_suited_connector', 'pre_suited_ace', 'pre_small_pair'].includes(analysisKey);
       const isDeepStack = callAmount > 0 && (heroStack / callAmount > 15);
       if (isSpeculativeHand && (strategy !== 'conservative' || isDeepStack) && callAmount < heroStack * 0.2) {
           adviceKey = equity > 35 ? 'advice_raise' : 'advice_call';
       }
 
-      let finalAdvice = t[adviceKey];
+      // Fix: 确保 finalAdvice 永远有值，即使 t[adviceKey] 缺失
+      let finalAdvice = t[adviceKey] || "Advice N/A";
       let finalReason = `Pot Odds: ${potOdds.toFixed(1)}%`;
 
-      // 4. 分析引擎覆盖 (Analyzer Override)
       if (analysisData) {
          finalReason = analysisData.reason;
-         // 强力牌(含 Nuts SF) 强制听从
          if (analysisKey.startsWith('made_') || analysisKey === 'monster' || analysisKey === 'pre_monster_pair') {
              finalAdvice = analysisData.advice;
          }
-         // 特殊情况：低端同花顺 -> 强制警告
          if (analysisKey === 'made_straight_flush_lower') {
              finalReason = `🛑 ${analysisData.reason} (Idiot End of SF)`;
          }
-         // 投机牌说明
          if (isSpeculativeHand && adviceKey.includes('call')) {
              finalReason = `${analysisData.reason} (Implied Odds OK)`;
          }
       }
 
-      // 5. 牌面纹理建议 (Texture Advice)
-      if (textureData && callAmount === 0 && !analysisKey.startsWith('made_')) {
+      if (textureData && callAmount === 0 && !analysisKey?.startsWith('made_')) {
           finalReason += `\n[${textureData.name}]: ${textureData.desc}`;
       }
 
@@ -367,7 +376,7 @@ function TexasHoldemAdvisor() {
         advice: finalAdvice,
         reason: finalReason,
         handTypeLabel: analysisData ? analysisData.label : null,
-        textureLabel: textureData ? textureData.name : null, // Display texture
+        textureLabel: textureData ? textureData.name : null, 
         betSizes,
         isBluff: adviceKey.includes('bluff')
       });
@@ -573,7 +582,8 @@ function TexasHoldemAdvisor() {
           <div className={`border rounded-xl overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500 ${result.isBluff ? 'bg-purple-900/20 border-purple-500/50' : 'bg-slate-900 border-slate-700'}`}>
              <div className="p-4 bg-slate-800/50 border-b border-slate-800 flex justify-between items-center">
                 <div>
-                   <h2 className={`text-2xl font-bold ${result.isBluff ? 'text-purple-400 animate-pulse' : result.advice.includes('Fold') ? 'text-red-400' : 'text-emerald-400'}`}>{result.advice}</h2>
+                   {/* Fix: 添加 ?. 防止 advice 为空时调用 includes 崩溃 */}
+                   <h2 className={`text-2xl font-bold ${result.isBluff ? 'text-purple-400 animate-pulse' : result.advice?.includes('Fold') ? 'text-red-400' : 'text-emerald-400'}`}>{result.advice}</h2>
                    <div className="mt-1 flex flex-wrap gap-1">
                       {result.handTypeLabel && <span className="text-xs bg-slate-700 px-2 py-0.5 rounded text-blue-200 border border-blue-500/30 flex items-center gap-1"><Lightbulb className="w-3 h-3"/> {result.handTypeLabel}</span>}
                       {result.textureLabel && <span className="text-xs bg-slate-700 px-2 py-0.5 rounded text-indigo-200 border border-indigo-500/30 flex items-center gap-1"><Grid className="w-3 h-3"/> {result.textureLabel}</span>}

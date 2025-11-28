@@ -1,6 +1,6 @@
 /**
- * Poker Advisor Pro - Data Layer (v5.0)
- * 核心升级：细分同花顺等级、引入牌面纹理分析、GTO 风格建议
+ * Poker Advisor Pro - Data Layer (v5.1 - Fixes)
+ * 修复：添加缺失的基础策略文本，防止渲染崩溃
  */
 
 window.PokerData = {};
@@ -13,7 +13,7 @@ window.PokerData.CONSTANTS = {
   STREETS: ['Pre-flop', 'Flop', 'Turn', 'River']
 };
 
-// --- B. 手牌分析建议库 (全面升级) ---
+// --- B. 手牌分析建议库 ---
 window.PokerData.HAND_ANALYSIS_DEFINITIONS = {
   zh: {
     // --- Pre-flop (翻牌前) ---
@@ -53,15 +53,15 @@ window.PokerData.HAND_ANALYSIS_DEFINITIONS = {
     trash: { label: "空气牌 (Trash)", advice: "弃牌 (Fold)", reason: "毫无胜率。除非你是为了偷底池，否则快跑。" }
   },
   en: {
-    // English Fallback (Simplified)
+    // English Fallback
     pre_monster_pair: { label: "Premium Pair", advice: "Raise/4-Bet", reason: "Build the pot early with AA/KK/QQ." },
     made_straight_flush_nuts: { label: "Nut Straight Flush", advice: "Slowplay", reason: "Invincible hand. Extract maximum value." },
     made_straight_flush_lower: { label: "Low End SF", advice: "Caution", reason: "Warning: Higher Straight Flush possible!" },
-    // ... others fallback to logic key if missing
+    trash: { label: "Trash", advice: "Fold", reason: "No value." }
   }
 };
 
-// --- C. 牌面纹理策略 (Board Texture Strategies) ---
+// --- C. 牌面纹理策略 ---
 window.PokerData.TEXTURE_STRATEGIES = {
   TEX_PAIRED: { name: "公对面 (Paired)", desc: "有人可能中三条或葫芦，诈唬需谨慎。" },
   TEX_MONOTONE: { name: "单色面 (Monotone)", desc: "极度危险，对手极易已中同花。" },
@@ -70,7 +70,7 @@ window.PokerData.TEXTURE_STRATEGIES = {
   TEX_RAINBOW_DRY: { name: "干燥面 (Dry/Rainbow)", desc: "非常安全，适合持续下注(C-Bet)诈唬。" }
 };
 
-// --- D. UI 文本 ---
+// --- D. UI 文本 (添加了缺失的 advice_*) ---
 window.PokerData.TEXTS = {
   zh: {
     appTitle: '德州扑克智囊 Pro',
@@ -102,7 +102,27 @@ window.PokerData.TEXTS = {
     selecting_flop: '选择翻牌',
     selecting_turn: '选择转牌',
     selecting_river: '选择河牌',
-    add_player: '添加对手'
+    add_player: '添加对手',
+    
+    // --- 新增：缺失的策略文本 ---
+    advice_raise: '建议加注 (Raise)',
+    advice_call: '建议跟注 (Call)',
+    advice_fold: '建议弃牌 (Fold)',
+    advice_raise_bluff: '建议诈唬 (Bluff Raise)',
+    
+    maniac: '疯鱼模式',
+    aggressive: '激进模式',
+    conservative: '保守模式',
+    active: '入局',
+    folded: '弃牌',
+    street_pre: '翻牌前',
+    street_flop: '翻牌圈',
+    street_turn: '转牌圈',
+    street_river: '河牌圈',
+    nextStreet: '收池 & 下一轮',
+    finishHand: '本局结束',
+    segment_main: '主池',
+    segment_side: '边池'
   },
   en: {
     appTitle: 'Poker Advisor Pro',
@@ -134,6 +154,26 @@ window.PokerData.TEXTS = {
     selecting_flop: 'Select Flop',
     selecting_turn: 'Select Turn',
     selecting_river: 'Select River',
-    add_player: 'Add Opponent'
+    add_player: 'Add Opponent',
+    
+    // --- Added Missing Keys ---
+    advice_raise: 'Advice: Raise',
+    advice_call: 'Advice: Call',
+    advice_fold: 'Advice: Fold',
+    advice_raise_bluff: 'Advice: Bluff Raise',
+    
+    maniac: 'Maniac',
+    aggressive: 'Aggressive',
+    conservative: 'Conservative',
+    active: 'Active',
+    folded: 'Folded',
+    street_pre: 'Pre-flop',
+    street_flop: 'Flop',
+    street_turn: 'Turn',
+    street_river: 'River',
+    nextStreet: 'Collect & Next',
+    finishHand: 'Finish Hand',
+    segment_main: 'Main Pot',
+    segment_side: 'Side Pot'
   }
 };
