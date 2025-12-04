@@ -1,6 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
 import { RefreshCw, Trophy, Users, Brain, Info, ArrowRight, Flame, Zap, Settings, X, ShieldCheck, Flag, Lightbulb, Grid, MapPin, Calculator, HelpCircle, RotateCcw, CheckSquare, CheckCircle, MousePointerClick, ChevronDown } from 'lucide-react';
+import CardIcon from './CardIcon';
+import SettingsPanel from './SettingsPanel';
+import DrawProbabilityChart from './DrawProbabilityChart';
+import CardSelector from './CardSelector';
+import PositionSelector from './PositionSelector';
 
 // 安全获取数据层
 const PokerData = window.PokerData || { 
@@ -24,53 +29,114 @@ const { SUITS, RANKS, RANK_VALUES } = CONSTANTS;
 
 // --- 核心算法 ---
 const evaluateHand = (cards) => {
-  if (!cards || cards.length < 5) return 0;
-  const sorted = [...cards].sort((a, b) => RANK_VALUES[b.rank] - RANK_VALUES[a.rank]);
-  const ranks = sorted.map(c => RANK_VALUES[c.rank]);
-  const suits = sorted.map(c => c.suit);
-  
-  const counts = {};
-  ranks.forEach(r => counts[r] = (counts[r] || 0) + 1);
-  const countValues = Object.values(counts);
-  
-  const suitCounts = {};
-  suits.forEach(s => suitCounts[s] = (suitCounts[s] || 0) + 1);
-  let flushSuit = Object.keys(suitCounts).find(s => suitCounts[s] >= 5);
-  
-  const uniqueRanks = [...new Set(ranks)].sort((a,b) => b-a);
-  let straightHigh = 0;
-  for (let i = 0; i <= uniqueRanks.length - 5; i++) {
-    if (uniqueRanks[i] - uniqueRanks[i+4] === 4) { straightHigh = uniqueRanks[i]; break; }
-  }
-  if (!straightHigh && uniqueRanks.includes(14) && uniqueRanks.includes(2) && uniqueRanks.includes(3) && uniqueRanks.includes(4) && uniqueRanks.includes(5)) straightHigh = 5;
+    if (!cards || cards.length < 5) return 0;
 
-  let isFlush = !!flushSuit;
-  let isStraight = straightHigh > 0;
+    const scoreFromRanks = (base, rankValues) => {
+        let score = base;
+        // Use powers of 15 to ensure no overlap between ranks (2-14)
+        for (let i = 0; i < Math.min(rankValues.length, 5); i++) {
+            score += rankValues[i] * Math.pow(15, 4 - i);
+        }
+        return score;
+    };
 
-  if (isFlush && isStraight) return 8000000 + straightHigh; 
-  if (countValues.includes(4)) {
-      const quadRank = Object.keys(counts).find(r => counts[r] === 4);
-      return 7000000 + Number(quadRank);
-  }
-  if (countValues.includes(3) && countValues.includes(2)) {
-      const tripRank = Object.keys(counts).find(r => counts[r] === 3);
-      return 6000000 + Number(tripRank);
-  }
-  if (isFlush) return 5000000 + ranks[0]; 
-  if (isStraight) return 4000000 + straightHigh;
-  if (countValues.includes(3)) {
-      const tripRank = Object.keys(counts).find(r => counts[r] === 3);
-      return 3000000 + Number(tripRank);
-  }
-  if (countValues.filter(c => c === 2).length >= 2) {
-      const pairs = Object.keys(counts).filter(r => counts[r] === 2).map(Number).sort((a,b)=>b-a);
-      return 2000000 + (pairs[0] * 100) + pairs[1];
-  }
-  if (countValues.includes(2)) {
-      const pairRank = Object.keys(counts).find(r => counts[r] === 2);
-      return 1000000 + (Number(pairRank) * 100);
-  }
-  return ranks[0];
+    const ranks = cards.map(c => RANK_VALUES[c.rank]).sort((a, b) => b - a);
+    const suits = cards.map(c => c.suit);
+    
+    const counts = {};
+    ranks.forEach(r => { counts[r] = (counts[r] || 0) + 1; });
+    
+    const suitCounts = {};
+    suits.forEach(s => { suitCounts[s] = (suitCounts[s] || 0) + 1; });
+    const flushSuit = Object.keys(suitCounts).find(s => suitCounts[s] >= 5);
+
+    const uniqueRanks = [...new Set(ranks)];
+    let straightHigh = 0;
+    // Ace-low straight check
+    if (uniqueRanks.includes(14) && uniqueRanks.includes(5) && uniqueRanks.includes(4) && uniqueRanks.includes(3) && uniqueRanks.includes(2)) {
+        const aceLowRanks = [5,4,3,2,1];
+        straightHigh = 5;
+    } else {
+        for (let i = 0; i <= uniqueRanks.length - 5; i++) {
+            if (uniqueRanks[i] - uniqueRanks[i+4] === 4) {
+                straightHigh = uniqueRanks[i];
+                break;
+            }
+        }
+    }
+
+    // Straight Flush
+    if (flushSuit) {
+        const flushRanks = cards.filter(c => c.suit === flushSuit).map(c => RANK_VALUES[c.rank]);
+        const uniqueFlushRanks = [...new Set(flushRanks)].sort((a,b) => b-a);
+        let flushStraightHigh = 0;
+        if (uniqueFlushRanks.includes(14) && uniqueFlushRanks.includes(5) && uniqueFlushRanks.includes(4) && uniqueFlushRanks.includes(3) && uniqueFlushRanks.includes(2)) {
+            flushStraightHigh = 5;
+        } else {
+            for (let i = 0; i <= uniqueFlushRanks.length - 5; i++) {
+                if (uniqueFlushRanks.length >= 5 && uniqueFlushRanks[i] - uniqueFlushRanks[i+4] === 4) {
+                    flushStraightHigh = uniqueFlushRanks[i];
+                    break;
+                }
+            }
+        }
+        if (flushStraightHigh > 0) return 8000000 + flushStraightHigh;
+    }
+
+    const quadRanks = Object.keys(counts).filter(r => counts[r] === 4).map(Number);
+    if (quadRanks.length > 0) {
+        const main = quadRanks[0];
+        const kickers = ranks.filter(r => r !== main).slice(0, 1);
+        return scoreFromRanks(7000000, [main, ...kickers]);
+    }
+
+    const tripRanks = Object.keys(counts).filter(r => counts[r] === 3).map(Number).sort((a, b) => b - a);
+    const pairRanks = Object.keys(counts).filter(r => counts[r] === 2).map(Number).sort((a, b) => b - a);
+    
+    // Full House
+    if (tripRanks.length > 0) {
+        if (tripRanks.length > 1) { // Two sets, highest makes the boat
+            return scoreFromRanks(6000000, [tripRanks[0], tripRanks[1]]);
+        }
+        if (pairRanks.length > 0) {
+            return scoreFromRanks(6000000, [tripRanks[0], pairRanks[0]]);
+        }
+    }
+
+    // Flush
+    if (flushSuit) {
+        const flushRanks = cards.filter(c => c.suit === flushSuit).map(c => RANK_VALUES[c.rank]).sort((a,b)=>b-a);
+        return scoreFromRanks(5000000, flushRanks.slice(0, 5));
+    }
+
+    // Straight
+    if (straightHigh > 0) {
+        return 4000000 + straightHigh;
+    }
+
+    // Three of a Kind
+    if (tripRanks.length > 0) {
+        const main = tripRanks[0];
+        const kickers = ranks.filter(r => r !== main).slice(0, 2);
+        return scoreFromRanks(3000000, [main, ...kickers]);
+    }
+
+    // Two Pair
+    if (pairRanks.length >= 2) {
+        const main = [pairRanks[0], pairRanks[1]];
+        const kickers = ranks.filter(r => r !== main[0] && r !== main[1]).slice(0, 1);
+        return scoreFromRanks(2000000, [...main, ...kickers]);
+    }
+
+    // One Pair
+    if (pairRanks.length === 1) {
+        const main = pairRanks[0];
+        const kickers = ranks.filter(r => r !== main).slice(0, 3);
+        return scoreFromRanks(1000000, [main, ...kickers]);
+    }
+
+    // High Card
+    return scoreFromRanks(0, ranks.slice(0, 5));
 };
 
 const analyzeBoardTexture = (communityCards) => {
@@ -170,17 +236,25 @@ const analyzeHandFeatures = (heroCards, communityCards) => {
       }
   }
 
-  if (score >= 2000000) return "top_pair"; 
-  if (score >= 1000000) {
-      const pairRank = Math.floor((score - 1000000) / 100);
-      if (pairRank === maxBoard) {
-        // 检查是否是顶对+听牌
-        if (isFlushDraw || isStraightDraw) {
-          return "top_pair_with_draw";
-        }
-        return "top_pair";
+  if (score >= 2000000 && score < 3000000) {
+      return "made_two_pair";
+  }
+  if (score >= 1000000 && score < 2000000) {
+      const pairRank = Math.floor((score - 1000000) / Math.pow(15, 4));
+      
+      if (isPair && h1 === pairRank && (boardRanks.length > 0 && h1 > maxBoard)) {
+          return "over_pair";
       }
-      if (pairRank > boardRanks[boardRanks.length-1]) return "middle_pair";
+
+      if (boardRanks.length > 0) {
+        if (pairRank === maxBoard) {
+            if (isFlushDraw || isStraightDraw) return "top_pair_with_draw";
+            return "top_pair";
+        }
+        if (pairRank > boardRanks[boardRanks.length - 1]) {
+            return "middle_pair";
+        }
+      }
       return "bottom_pair";
   }
 
@@ -195,18 +269,6 @@ const analyzeHandFeatures = (heroCards, communityCards) => {
   
   if (h1 >= 11) return "high_card_good";
   return "high_card_weak"; 
-};
-
-// UI 组件
-const CardIcon = ({ rank, suit }) => {
-  const isRed = suit === 'h' || suit === 'd';
-  const suitSymbol = { s: '♠', h: '♥', d: '♦', c: '♣' }[suit];
-  return (
-    <div className={`bg-white border border-gray-300 rounded-md flex flex-col items-center justify-center select-none shadow-sm w-full h-full ${isRed ? 'text-red-600' : 'text-slate-900'}`}>
-      <span className="font-bold text-sm leading-none">{rank}</span>
-      <span className="text-base leading-none">{suitSymbol}</span>
-    </div>
-  );
 };
 
 // --- 主程序 ---
@@ -388,7 +450,6 @@ function TexasHoldemAdvisor() {
   const handleHeroBetChange = (val) => setHeroBet(val === '' ? 0 : Math.min(Number(val), heroStack));
   const handleStackChange = (val) => setHeroStack(val === '' ? 0 : Math.max(0, Number(val)));
   const handleOpponentBetChange = (id, val) => setPlayers(players.map(p => p.id === id ? { ...p, bet: val === '' ? 0 : Number(val) } : p));
-  const handleBuyInChange = (val) => setBuyInAmount(val === '' ? 0 : Math.max(0, Number(val)));
 
   const handleNextStreet = () => {
     setMainPot(totalPot);
@@ -412,7 +473,7 @@ function TexasHoldemAdvisor() {
       let potSize = 0; let contributors = 0; let heroInvolved = false;
       if (heroTotal > prevCap) { potSize += Math.min(amount, heroTotal - prevCap); heroInvolved = true; contributors++; }
       opps.forEach(p => { if (p.finalTotal > prevCap) { potSize += Math.min(amount, p.finalTotal - prevCap); if (p.active) contributors++; } });
-      if (potSize > 0 && heroInvolved) segments.push({ id: cap, amount: potSize, contestants: contributors, result: 'loss' });
+      if (potSize > 0) segments.push({ id: cap, amount: potSize, contestants: contributors, result: 'loss', heroInvolved });
       prevCap = cap;
     });
     setPotSegments(segments); setSettlementMode(true);
@@ -435,6 +496,20 @@ function TexasHoldemAdvisor() {
   const unavailableCards = useMemo(() => [...heroHand, ...communityCards].filter(Boolean), [heroHand, communityCards]);
   const handleCardClick = (type, index) => setSelectingFor({ type, index });
 
+  const handleCardSelect = (card) => {
+    let nextState = null;
+    if (selectingFor.type === 'hero') {
+      const h = [...heroHand]; h[selectingFor.index] = card; setHeroHand(h);
+      if (selectingFor.index === 0) nextState = {type:'hero', index:1};
+    } else {
+      const b = [...communityCards]; b[selectingFor.index] = card; setCommunityCards(b);
+      if (selectingFor.index < 2) nextState = {type:'board', index: selectingFor.index+1};
+    }
+    setSelectingFor(nextState);
+  };
+
+  const handlePositionSelect = (key) => { setHeroPosition(key); setShowPositionSelector(false); };
+
   const getStrategyStyle = () => {
     switch(strategy) {
       case 'maniac': return 'bg-purple-900/50 text-purple-400 border-purple-800 shadow-[0_0_15px_rgba(168,85,247,0.3)]';
@@ -445,43 +520,6 @@ function TexasHoldemAdvisor() {
   const getStrategyLabel = () => {
     const profile = STRATEGY_PROFILES[strategy] || STRATEGY_PROFILES['conservative'];
     return lang === 'zh' ? profile.label_zh : profile.label_en;
-  };
-
-  const CardSelector = () => {
-    if (!selectingFor) return null;
-    let title = t.selectCard;
-    if (selectingFor.type === 'hero') title = `${t.selecting_hero} ${selectingFor.index + 1}/2`;
-    if (selectingFor.type === 'board') title = selectingFor.index < 3 ? `${t.selecting_flop} ${selectingFor.index + 1}/3` : selectingFor.index === 3 ? t.selecting_turn : t.selecting_river;
-    return (
-      <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={() => setSelectingFor(null)}>
-        <div className="bg-slate-800 p-4 rounded-xl max-w-lg w-full overflow-y-auto max-h-[90vh]" onClick={e => e.stopPropagation()}>
-           <div className="flex justify-between mb-4 text-white font-bold"><span>{title}</span><X onClick={() => setSelectingFor(null)}/></div>
-           <div className="grid grid-cols-4 gap-2">
-             {SUITS.map(suit => (
-               <div key={suit} className="flex flex-col gap-2">
-                 {RANKS.map(rank => {
-                   const takenCount = unavailableCards.filter(c => c.rank === rank && c.suit === suit).length;
-                   return (<button key={rank+suit} disabled={takenCount >= deckCount} onClick={() => {
-                       const card = { rank, suit };
-                       let nextState = null;
-                       
-                       if (selectingFor.type === 'hero') {
-                         const h = [...heroHand]; h[selectingFor.index] = card; setHeroHand(h);
-                         if (selectingFor.index === 0) nextState = {type:'hero', index:1};
-                       } else {
-                         const b = [...communityCards]; b[selectingFor.index] = card; setCommunityCards(b);
-                         if (selectingFor.index < 2) nextState = {type:'board', index: selectingFor.index+1};
-                       }
-                       
-                       setSelectingFor(nextState);
-                     }} className={`p-1 rounded flex justify-center hover:bg-slate-700 ${takenCount >= deckCount ? 'opacity-20 cursor-not-allowed' : ''}`}><CardIcon rank={rank} suit={suit} /></button>);
-                 })}
-               </div>
-             ))}
-           </div>
-        </div>
-      </div>
-    );
   };
 
   return (
@@ -594,12 +632,12 @@ function TexasHoldemAdvisor() {
             <div className="bg-slate-900 border border-slate-700 rounded-xl p-4 space-y-3">
               <h2 className="text-center text-xl font-bold text-indigo-200">{t.settle_title}</h2>
               {potSegments.map((seg, idx) => (
-               <div key={idx} className="bg-slate-800 p-3 rounded border border-slate-700 flex justify-between items-center">
+               <div key={idx} className={`bg-slate-800 p-3 rounded border border-slate-700 flex justify-between items-center ${!seg.heroInvolved && 'opacity-50'}`}>
                  <span className="text-sm font-bold text-slate-300 flex gap-2 items-center"><ShieldCheck className="w-4 h-4"/> {idx===0?t.segment_main:`${t.segment_side} ${idx}`} (${seg.amount})</span>
                  <div className="flex gap-1">
-                   <button onClick={() => updateSegmentResult(idx, 'win')} className={`px-2 py-1 text-xs rounded border ${seg.result==='win'?'bg-emerald-600 text-white border-emerald-500':'bg-slate-700 text-slate-400 border-slate-600'}`}>{t.settle_win}</button>
-                   <button onClick={() => updateSegmentResult(idx, 'split')} className={`px-2 py-1 text-xs rounded border ${seg.result==='split'?'bg-blue-600 text-white border-blue-500':'bg-slate-700 text-slate-400 border-slate-600'}`}>{t.settle_split}</button>
-                   <button onClick={() => updateSegmentResult(idx, 'loss')} className={`px-2 py-1 text-xs rounded border ${seg.result==='loss'?'bg-red-900/50 text-red-200 border-red-800':'bg-slate-700 text-slate-400 border-slate-600'}`}>{t.settle_loss}</button>
+                   <button onClick={() => seg.heroInvolved && updateSegmentResult(idx, 'win')} disabled={!seg.heroInvolved} className={`px-2 py-1 text-xs rounded border ${seg.result==='win'?'bg-emerald-600 text-white border-emerald-500':'bg-slate-700 text-slate-400 border-slate-600'} disabled:opacity-50 disabled:cursor-not-allowed`}>{t.settle_win}</button>
+                   <button onClick={() => seg.heroInvolved && updateSegmentResult(idx, 'split')} disabled={!seg.heroInvolved} className={`px-2 py-1 text-xs rounded border ${seg.result==='split'?'bg-blue-600 text-white border-blue-500':'bg-slate-700 text-slate-400 border-slate-600'} disabled:opacity-50 disabled:cursor-not-allowed`}>{t.settle_split}</button>
+                   <button onClick={() => seg.heroInvolved && updateSegmentResult(idx, 'loss')} disabled={!seg.heroInvolved} className={`px-2 py-1 text-xs rounded border ${seg.result==='loss'?'bg-red-900/50 text-red-200 border-red-800':'bg-slate-700 text-slate-400 border-slate-600'} disabled:opacity-50 disabled:cursor-not-allowed`}>{t.settle_loss}</button>
                  </div>
                </div>
              ))}
@@ -635,11 +673,12 @@ function TexasHoldemAdvisor() {
                  <div className="bg-slate-800 p-2 rounded border border-slate-700 flex items-center gap-3">
                     <div className="bg-indigo-900/50 p-2 rounded text-indigo-300"><Calculator className="w-5 h-5"/></div>
                     <div>
-                       <div className="text-sm font-bold text-indigo-200">{result.drawStats.label}</div>
-                       <div className="text-xs text-slate-400">Outs: <span className="text-white font-bold">{result.drawStats.outs}</span> | Approx Equity: <span className="text-white font-bold">~{result.drawStats.outs * (street===1?4:2)}%</span></div>
+                       <div className="text-sm font-bold text-indigo-200">{result.drawStats.label} ({result.drawStats.outs} Outs)</div>
                     </div>
                  </div>
                )}
+
+               {result.drawStats && <DrawProbabilityChart outs={result.drawStats.outs} street={street} t={t} />}
                
                {result.betSizes && (
                  <div>
@@ -665,62 +704,33 @@ function TexasHoldemAdvisor() {
         )}
       </div>
 
-      <CardSelector />
+      <CardSelector 
+        selectingFor={selectingFor}
+        onClose={() => setSelectingFor(null)}
+        onCardSelect={handleCardSelect}
+        unavailableCards={unavailableCards}
+        deckCount={deckCount}
+        t={t}
+      />
       
-      {showPositionSelector && (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={() => setShowPositionSelector(false)}>
-          <div className="bg-slate-800 p-6 rounded-xl border border-slate-600 shadow-2xl w-full max-w-sm max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-             <div className="flex justify-between mb-4">
-               <h3 className="font-bold text-white flex items-center gap-2"><MapPin className="w-4 h-4"/> {t.select_position}</h3>
-               <button onClick={() => setShowPositionSelector(false)}><X/></button>
-             </div>
-             <div className="space-y-3">
-               {['EP', 'MP', 'LP', 'BLINDS'].map(key => {
-                 const data = POSITIONS[lang][key]; 
-                 return (
-                   <button
-                     key={key}
-                     onClick={() => { setHeroPosition(key); setShowPositionSelector(false); }}
-                     className={`w-full text-left p-3 rounded-lg border transition ${heroPosition === key ? 'bg-blue-900/30 border-blue-500' : 'bg-slate-700/30 border-slate-700 hover:bg-slate-700'}`}
-                   >
-                     <div className="flex justify-between items-center mb-1">
-                       <span className={`font-bold text-sm ${heroPosition === key ? 'text-blue-300' : 'text-slate-200'}`}>{data.label}</span>
-                       {heroPosition === key && <CheckCircle className="w-3 h-3 text-blue-400"/>}
-                     </div>
-                     <p className="text-[10px] text-slate-400 mb-1 leading-relaxed">{data.description}</p>
-                     <p className="text-[10px] text-slate-500 italic">💡 {data.action_plan}</p>
-                   </button>
-                 );
-               })}
-             </div>
-          </div>
-        </div>
-      )}
+      <PositionSelector 
+        show={showPositionSelector}
+        onClose={() => setShowPositionSelector(false)}
+        onPositionSelect={handlePositionSelect}
+        currentPosition={heroPosition}
+        POSITIONS={POSITIONS} lang={lang} t={t}
+      />
 
-      {showSettings && (
-         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={() => setShowSettings(false)}>
-            <div className="bg-slate-800 p-6 rounded-xl border border-slate-600 shadow-2xl w-full max-w-sm" onClick={e => e.stopPropagation()}>
-               <div className="flex justify-between mb-4"><h3 className="font-bold text-white flex items-center gap-2"><Settings className="w-4 h-4"/> {t.game_settings}</h3><button onClick={() => setShowSettings(false)}><X/></button></div>
-               <div className="space-y-4">
-                  <div>
-                     <label className="block text-sm text-slate-400 mb-2">{t.deck_count}: <span className="text-white font-mono">{deckCount}</span></label>
-                     <input type="range" min="1" max="8" value={deckCount} onChange={e => setDeckCount(Number(e.target.value))} className="w-full accent-blue-500"/>
-                     <div className="flex justify-between text-xs text-slate-600 font-mono"><span>1</span><span>8</span></div>
-                     <p className="text-[10px] text-slate-500 mt-1">{t.deck_info}</p>
-                  </div>
-                  <div>
-                     <label className="block text-sm text-slate-400 mb-2">{t.buy_in_amount}</label>
-                     <div className="flex items-center bg-slate-900 rounded border border-slate-700"><span className="px-3 text-slate-500">$</span><input type="number" value={buyInAmount} onChange={e => setBuyInAmount(Number(e.target.value))} className="w-full bg-transparent py-2 text-white font-mono focus:outline-none"/></div>
-                     <p className="text-[10px] text-slate-500 mt-1">{t.buy_in_info}</p>
-                  </div>
-                  <div className="p-3 bg-slate-900 rounded text-xs text-slate-500 border border-slate-700">
-                     <p>GTO Engine v7.0 Active</p>
-                     <p className="mt-1 text-emerald-500">• Strict Hand Logic</p>
-                  </div>
-               </div>
-            </div>
-         </div>
-      )}
+      <SettingsPanel 
+        show={showSettings}
+        onClose={() => setShowSettings(false)}
+        t={t}
+        deckCount={deckCount}
+        onDeckCountChange={e => setDeckCount(Number(e.target.value))}
+        buyInAmount={buyInAmount}
+        onBuyInChange={e => setBuyInAmount(Number(e.target.value))}
+      />
+
     </div>
   );
 }
