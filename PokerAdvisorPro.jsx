@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
 import { RefreshCw, Trophy, Users, Brain, Info, ArrowRight, Flame, Zap, Settings, X, ShieldCheck, Flag, Lightbulb, Grid, MapPin, Calculator, HelpCircle, RotateCcw, CheckSquare, CheckCircle, MousePointerClick, ChevronDown } from 'lucide-react';
-import CardIcon from './CardIcon';
-import SettingsPanel from './SettingsPanel';
-import DrawProbabilityChart from './DrawProbabilityChart';
-import CardSelector from './CardSelector';
-import PositionSelector from './PositionSelector';
+import CardIcon from './CardIcon.jsx';
+import SettingsPanel from './SettingsPanel.jsx';
+import DrawProbabilityChart from './DrawProbabilityChart.jsx';
+import CardSelector from './CardSelector.jsx';
+import PositionSelector from './PositionSelector.jsx';
 
 // 安全获取数据层
 const PokerData = window.PokerData || { 
