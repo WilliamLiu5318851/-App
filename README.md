@@ -1,125 +1,91 @@
-[Poker Advisor Pro (德州扑克智囊 Pro)
+# 德州扑克智囊 Pro (Poker Advisor Pro)
 
-![Poker Advisor Pro Banner](image.png)
+[![React](https://img.shields.io/badge/React-18.x-blue?style=flat-square&logo=react)](https://reactjs.org/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.x-blue?style=flat-square&logo=tailwindcss)](https://tailwindcss.com/)
+[![Jest](https://img.shields.io/badge/Tests-Jest-blue?style=flat-square&logo=jest)](https://jestjs.io/)
 
-> **Live Demo:** [https://poker-advisor-pro.pages.dev/](https://poker-advisor-pro.pages.dev/)
+一款基于 GTO（最优游戏理论）的实时德州扑克辅助工具，旨在通过数据分析和蒙特卡洛模拟，为玩家提供科学的决策建议。
 
-## 📖 Introduction (项目介绍)
+*(在这里可以放一张应用截图)*
 
-Poker Advisor Pro is a sophisticated, web-based decision support system for Texas Hold'em. It acts as a real-time HUD (Heads-Up Display) simulation, designed to help players make mathematically sound decisions through equity calculation, pot tracking, and strategic advice.
+---
 
-This project has evolved from a simple calculator into a full-fledged Game State Engine, capable of tracking the entire lifecycle of a hand—from Pre-flop to River—while handling complex scenarios like multi-way All-ins, Side Pots, and bankroll management.
+## ✨ 核心功能
 
-Poker Advisor Pro 是一个先进的德州扑克网页版决策支持系统。它作为一个实时的 HUD（抬头显示）模拟器，通过胜率计算、底池追踪和策略建议，帮助玩家做出符合数学逻辑的最佳决策。
+- **实时胜率计算**: 通过高效的蒙特卡洛模拟，精确计算当前手牌在任意情况下的胜率 (Equity)。
+- **GTO 决策建议**: 结合胜率、底池赔率 (Pot Odds)、SPR 等关键指标，提供加注、跟注、弃牌或诈唬的 GTO 建议。
+- **动态策略调整**: 支持 **保守型**、**激进型**、**疯鱼型** 三种玩家风格，AI 建议会随之调整。
+- **手牌与牌面分析**: 自动识别手牌类型（如顶对、听花、组合听牌）和牌面结构（如干燥面、听花面），并给出相应策略解读。
+- **翻牌前范围指导**: 内置标准 6 人桌 GTO 范围，检查您的起手牌是否在推荐范围内。
+- **智能下注尺度**: 根据牌力、牌面和策略，推荐合理的价值下注和诈唬下注大小。
+- **多语言支持**: 内置中文和英文界面，轻松切换。
+- **全面的单元测试**: 核心算法 (`evaluateHand`, `analyzeHandFeatures`) 经过 Jest 全面测试，确保逻辑稳定可靠。
 
-本项目已从一个简单的计算器演变为一个完整的 游戏状态引擎，能够追踪一手牌从翻牌前（Pre-flop）到河牌圈（River）的全生命周期，并能处理多人 All-in、边池（Side Pots）和资金管理等复杂场景。
+## 🚀 技术栈
 
-## 🚀 Key Features (核心功能)
+- **前端**: React.js
+- **UI 样式**: Tailwind CSS
+- **测试**: Jest
+- **图标**: Lucide React
 
-🧠 v3.5 Core Engine & Interaction (最新特性)
+## 🛠️ 如何运行
 
-Separated Architecture (分离式架构):
+本项目使用 `npm` 进行包管理。
 
-EN: Migrated from a monolithic HTML file to a modular Separated Mode (HTML + JSX) for better maintainability and developer experience.
+1.  **克隆仓库**
+    ```bash
+    git clone <your-repository-url>
+    cd Poker-Advisor-Pro
+    ```
 
-CN: 从单文件 HTML 迁移到了模块化的 分离模式 (HTML + JSX)，极大地提升了代码的可维护性和开发体验。
+2.  **安装依赖**
+    ```bash
+    npm install
+    ```
 
-Global Hybrid Loading (全局混合加载):
+3.  **启动开发服务器**
+    
+    *注意：本项目是一个纯前端 React 应用，需要在一个 HTML 文件中被挂载。你需要一个简单的 `index.html` 文件来引入编译后的 JS。*
 
-EN: Implemented a robust loading strategy using Global React/ReactDOM builds to resolve CORS and module resolution issues in local environments without a build step.
+    通常使用 `create-react-app` 或 `Vite` 等脚手架会包含此步骤。如果手动配置，请确保你的构建工具（如 Webpack）能正确处理。
 
-CN: 实施了基于全局 React/ReactDOM 的混合加载策略，在无需构建步骤的情况下，完美解决了本地环境下的跨域（CORS）和模块解析问题。
+    假设你已配置好开发环境，运行：
+    ```bash
+    npm start
+    ```
 
-## ⚡ One-Click Actions (一键操作):
+4.  **运行测试**
+    ```bash
+    npm test
+    ```
 
-Smart Bet (智能下注): Click on any strategy suggestion (e.g., "Small Bet") to auto-fill the amount. (点击任意策略建议即可自动填入下注金额)
+## 📂 项目结构
 
-🏳️ Instant Fold (一键弃牌): New "Fold" button instantly deducts the current bet attempt, resets the pot, and deals a fresh hand—optimizing the flow for high-volume sessions. (新增“弃牌”按钮，点击即扣除当前下注、重置底池并开始新的一局，专为高频练习设计)
+```
+Poker-Advisor-Pro/
+├── public/
+│   ├── index.html         # React 应用挂载点
+│   └── PokerData.js       # 全局数据层 (策略, 文本等)
+├── src/
+│   ├── PokerAdvisorPro.js # 核心应用组件和主逻辑
+│   ├── components/        # (建议) 存放如 CardIcon, SettingsPanel 等组件
+│   └── index.js           # 应用入口文件
+├── PokerAdvisorPro.test.js # 核心算法的单元测试
+├── package.json
+└── README.md
+```
 
-UX Polish (体验优化): Fixed "sticky zero" input behaviors for a smoother mobile typing experience. (修复了输入框“粘性0”的问题，移动端输入更加流畅)
+## 💡 核心逻辑
 
-## 💰 Pot & Bankroll Management (资金管理)
+1.  **`evaluateHand`**: 评估 7 张牌能组成的最大牌力，返回一个数值分数用于比较。
+2.  **`analyzeHandFeatures`**: 分析手牌和公共牌，返回一个描述性的键（如 `top_pair_with_draw`）。
+3.  **`runMonteCarloSimulation`**: 核心模拟器。通过上千次随机发牌，计算英雄手牌的胜率。经过了性能优化，速度更快。
+4.  **`getGtoAdvice`**: 决策引擎。根据胜率、赔率和玩家风格，输出最终的行动建议。
 
-Smart Pot Logic: Automatically tracks Main Pot and Side Pots when multiple players are All-in with different stack sizes. (智能边池逻辑：自动处理多人 All-in 时的 主池 与 边池 分配)
+## 🤝 贡献
 
-SPR Tracking: Real-time Stack-to-Pot Ratio calculation with "Pot Committed" warnings when SPR < 1. (实时计算 SPR (筹码底池比)，并在 SPR < 1 时发出“套池”警告)
+欢迎提交 Pull Requests 或 Issues 来改进这个项目。
 
-Dynamic Rebuy: Bankruptcy protection with customizable buy-in amounts. (动态重买机制：提供破产保护和自定义买入额)
+## 📄 许可证
 
-## 🤖 Strategy Advisor (策略建议)
-
-Real-time Equity: Uses Monte Carlo simulations (1500+ iterations/run) to predict win rates. (实时胜率：使用 蒙特卡洛模拟 算法进行高精度预测)
-
-Persona-based Advice (风格化建议): Switch between three distinct strategy engines:
-
-🛡️ Conservative (Tight): Solid, value-heavy playstyle. (保守/紧凶)
-
-⚔️ Aggressive: Balanced semi-bluffs and pressure. (激进)
-
-🔥 Maniac (Bluff): High variance, exploits fold equity. (疯鱼/诈唬)
-
-## 🛠 Tech Stack (技术栈)
-
-This project utilizes a modern Zero-Build Architecture, allowing it to run directly in the browser without a complex Node.js build step (Webpack/Vite), making it incredibly lightweight and easy to deploy.
-
-本项目采用现代化的 零构建架构 (Zero-Build Architecture)，无需复杂的 Node.js 构建步骤（如 Webpack/Vite）即可直接在浏览器中运行，极其轻量且易于部署。
-
-Frontend: React 18 (via CDN & Global UMD)
-
-Styling: Tailwind CSS (via CDN)
-
-Icons: Lucide React
-
-Compiler: Babel Standalone (In-browser JSX compilation)
-
-Deployment: Netlify (CI/CD via GitHub)
-
-## 📂 Installation & Usage (安装与使用)
-
-Local Development (本地开发 - 推荐)
-
-Due to browser CORS policies regarding local file access (file://), you need a local server to load the separated .jsx module.
-由于浏览器的跨域策略限制了对本地文件（file://）的访问，你需要一个本地服务器来加载分离的 .jsx 模块。
-
-Clone the repository (克隆仓库):
-
-git clone [https://github.com/WilliamLiu5318851/poker-advisor-pro.git](https://github.com/WilliamLiu5318851/poker-advisor-pro.git)
-
-
-Run with Live Server (使用 Live Server 运行):
-
-Open the folder in VS Code. (用 VS Code 打开文件夹)
-
-Install the "Live Server" extension. (安装 "Live Server" 插件)
-
-Right-click index.html and select "Open with Live Server". (右键点击 index.html 并选择 "Open with Live Server")
-
-Alternative (Python 替代方案):
-
-# In the project directory (在项目目录下)
-python -m http.server
-# Open http://localhost:8000
-
-
-Deployment (部署)
-
-Simply push your changes to GitHub. Netlify (connected to your repo) will automatically deploy the index.html and PokerAdvisorPro.jsx files.
-只需将更改推送到 GitHub。连接到你仓库的 Netlify 会自动部署最新版本。
-
-## 📸 Screenshots (截图)
-
-| Equity Calculation (胜率计算) | Strategy Advice (策略建议) |
-
-| ![功能1截图](Screenshot1.png) | ![功能2截图](Screenshot2.png) |
-
-👤 Author (作者)
-
-William Liu (z5318851)
-
-University: University of New South Wales (UNSW)
-
-Major: Computer Science Undergraduate
-
-Expected Graduation: Sep 2026
-
-Disclaimer: This tool is for educational and simulation purposes only. (免责声明：本工具仅用于教育和模拟目的。)]
+本项目采用 MIT License。
