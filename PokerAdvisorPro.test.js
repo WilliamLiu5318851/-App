@@ -65,6 +65,85 @@ const evaluateHand = (cards) => {
   return ranks[0];
 };
 
+const analyzeHandFeatures = (heroCards, communityCards) => {
+  if (!heroCards[0] || !heroCards[1]) return null;
+  const h1_rank = RANK_VALUES[heroCards[0].rank];
+  const h2_rank = RANK_VALUES[heroCards[1].rank];
+  const h1 = Math.max(h1_rank, h2_rank);
+  const h2 = Math.min(h1_rank, h2_rank);
+  const isPair = h1 === h2;
+  const isSuited = heroCards[0].suit === heroCards[1].suit;
+
+  const board = communityCards.filter(Boolean);
+  if (board.length === 0) {
+      if (isPair) {
+          if (h1 >= 12) return "pre_monster_pair"; 
+          if (h1 >= 9) return "pre_strong_pair";   
+          return "pre_small_pair";                 
+      }
+      if (h1 >= 13 && h2 >= 12) return "pre_premium_high"; 
+      if (isSuited) {
+          if (h1 === 14) return "pre_suited_ace";
+          if ((h1 - h2 <= 2)) return "pre_suited_connector"; 
+          if (h1 >= 10 && h2 >= 10) return "pre_broadway";
+      }
+      if (h1 >= 10 && h2 >= 10) return "pre_broadway";
+      
+      if (h1 >= 11) return "pre_high_card"; // J, Q, K, A 单张
+      return "pre_trash";
+  }
+
+  const allCards = [...heroCards, ...board];
+  const isRiver = board.length === 5;
+  const score = evaluateHand(allCards);
+  const boardRanks = board.map(c => RANK_VALUES[c.rank]).sort((a,b)=>b-a);
+  const maxBoard = boardRanks[0];
+
+  if (score >= 8000000) return "made_straight_flush_nuts"; 
+  if (score >= 7000000) return "made_quads";
+  if (score >= 6000000) return "made_full_house";
+  if (score >= 5000000) return "made_flush";
+  if (score >= 4000000) return "made_straight";
+  if (score >= 3000000) return "monster"; 
+
+  let isFlushDraw = false;
+  let isNutFD = false;
+  let isStraightDraw = false;
+
+  if (!isRiver) {
+      const suits = {};
+      const ranks = [];
+      allCards.forEach(c => {
+        suits[c.suit] = (suits[c.suit] || 0) + 1;
+        ranks.push(RANK_VALUES[c.rank]);
+      });
+      
+      const fdSuit = Object.keys(suits).find(s => suits[s] === 4);
+      isFlushDraw = !!fdSuit;
+      isNutFD = isFlushDraw && ((heroCards[0].suit === fdSuit && h1_rank === 14) || (heroCards[1].suit === fdSuit && h2_rank === 14));
+      
+      const uRanks = [...new Set(ranks)].sort((a,b)=>a-b);
+      for(let i=0; i<=uRanks.length-4; i++) {
+          if (uRanks[i+3] - uRanks[i] <= 4) isStraightDraw = true;
+      }
+  }
+
+  if (score >= 1000000) { // Includes two-pair
+      const pairRank = Math.floor((score - 1000000) / 100);
+      if (pairRank === maxBoard) return (isFlushDraw || isStraightDraw) ? "top_pair_with_draw" : "top_pair";
+      if (pairRank > boardRanks[boardRanks.length-1]) return "middle_pair";
+      return "bottom_pair";
+  }
+
+  if (isFlushDraw && isStraightDraw) return "combo_draw";
+  if (isNutFD) return "flush_draw_nut";
+  if (isFlushDraw) return "flush_draw";
+  if (isStraightDraw) return "straight_draw_oesd";
+
+  if (h1 > maxBoard && h2 > maxBoard) return "overcards"; 
+  if (h1 >= 11) return "high_card_good";
+  return "high_card_weak"; 
+};
 
 describe('evaluateHand', () => {
   const createHand = (ranks, suits) => ranks.map((r, i) => ({ rank: r, suit: suits[i] }));
@@ -145,5 +224,81 @@ describe('evaluateHand', () => {
     // 7 cards: 4s 5s 6s 7s 8s 9d Tc (should be 8-high flush, not a straight)
     const hand = createHand(['4', '5', '6', '7', '8', '9', 'T'], ['s', 's', 's', 's', 's', 'd', 'c']);
     expect(evaluateHand(hand)).toBe(5000000 + 8);
+  });
+});
+
+describe('analyzeHandFeatures', () => {
+  const createHand = (ranks, suits) => ranks.map((r, i) => ({ rank: r, suit: suits[i] }));
+
+  // Pre-flop tests
+  describe('Pre-flop Analysis', () => {
+    const community = [];
+    test('should identify monster pair', () => {
+      expect(analyzeHandFeatures(createHand(['A', 'A'], ['s', 'd']), community)).toBe('pre_monster_pair');
+      expect(analyzeHandFeatures(createHand(['K', 'K'], ['s', 'd']), community)).toBe('pre_monster_pair');
+    });
+    test('should identify strong pair', () => {
+      expect(analyzeHandFeatures(createHand(['J', 'J'], ['s', 'd']), community)).toBe('pre_strong_pair');
+    });
+    test('should identify small pair for set mining', () => {
+      expect(analyzeHandFeatures(createHand(['7', '7'], ['s', 'd']), community)).toBe('pre_small_pair');
+    });
+    test('should identify premium high cards', () => {
+      expect(analyzeHandFeatures(createHand(['A', 'K'], ['s', 'd']), community)).toBe('pre_premium_high');
+    });
+    test('should identify suited ace', () => {
+      expect(analyzeHandFeatures(createHand(['A', '5'], ['s', 's']), community)).toBe('pre_suited_ace');
+    });
+    test('should identify suited connector', () => {
+      expect(analyzeHandFeatures(createHand(['8', '7'], ['h', 'h']), community)).toBe('pre_suited_connector');
+    });
+    test('should identify broadway cards', () => {
+      expect(analyzeHandFeatures(createHand(['K', 'Q'], ['s', 'd']), community)).toBe('pre_broadway');
+    });
+    test('should identify a single high card hand', () => {
+      expect(analyzeHandFeatures(createHand(['K', '9'], ['s', 'd']), community)).toBe('pre_high_card');
+    });
+    test('should identify trash hand', () => {
+      expect(analyzeHandFeatures(createHand(['7', '2'], ['s', 'd']), community)).toBe('pre_trash');
+    });
+  });
+
+  // Post-flop tests
+  describe('Post-flop Analysis', () => {
+    test('should identify top pair', () => {
+      const hero = createHand(['A', 'Q'], ['s', 'd']);
+      const community = createHand(['A', '7', '2'], ['h', 'c', 'd']);
+      expect(analyzeHandFeatures(hero, community)).toBe('top_pair');
+    });
+    test('should identify top pair with flush draw', () => {
+      const hero = createHand(['A', 'Q'], ['s', 's']);
+      const community = createHand(['A', '7', '2'], ['h', 's', 's']);
+      expect(analyzeHandFeatures(hero, community)).toBe('top_pair_with_draw');
+    });
+    test('should identify a set as a monster', () => {
+      const hero = createHand(['8', '8'], ['s', 'd']);
+      const community = createHand(['A', '8', '2'], ['h', 'c', 'd']);
+      expect(analyzeHandFeatures(hero, community)).toBe('monster');
+    });
+    test('should identify a nut flush draw', () => {
+      const hero = createHand(['A', '5'], ['s', 's']);
+      const community = createHand(['K', '9', '2'], ['s', 'd', 's']);
+      expect(analyzeHandFeatures(hero, community)).toBe('flush_draw_nut');
+    });
+    test('should identify an open-ended straight draw (OESD)', () => {
+      const hero = createHand(['8', '7'], ['s', 'd']);
+      const community = createHand(['6', '5', 'A'], ['h', 'c', 'd']);
+      expect(analyzeHandFeatures(hero, community)).toBe('straight_draw_oesd');
+    });
+    test('should identify a combo draw', () => {
+      const hero = createHand(['8', '7'], ['s', 's']);
+      const community = createHand(['6', '5', 'A'], ['s', 'h', 's']);
+      expect(analyzeHandFeatures(hero, community)).toBe('combo_draw');
+    });
+    test('should identify overcards', () => {
+      const hero = createHand(['A', 'K'], ['s', 'd']);
+      const community = createHand(['J', '7', '2'], ['h', 'c', 'd']);
+      expect(analyzeHandFeatures(hero, community)).toBe('overcards');
+    });
   });
 });
