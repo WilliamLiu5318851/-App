@@ -332,7 +332,15 @@ window.PokerData.TEXTS = {
     nextStreet: '收池 & 下一轮',
     finishHand: '本局结束',
     segment_main: '主池',
-    segment_side: '边池'
+    segment_side: '边池',
+    in_position_range: '在推荐范围内',
+    out_of_position_range: '不在推荐范围内',
+    classic_matchup: '经典对抗',
+    equity_vs_opponents: '胜率 vs. 对手',
+    equity_trend_chart_title: '手牌胜率趋势',
+    num_opponents: '对手数量',
+    equity_percentage: '胜率 (%)',
+    opponents_short: '人'
   },
   en: {
     appTitle: 'Poker Advisor Pro',
@@ -400,6 +408,14 @@ window.PokerData.TEXTS = {
     nextStreet: 'Collect & Next',
     finishHand: 'Finish Hand',
     segment_main: 'Main Pot',
-    segment_side: 'Side Pot'
+    segment_side: 'Side Pot',
+    in_position_range: 'In position range',
+    out_of_position_range: 'Out of position range',
+    classic_matchup: 'Classic Matchup',
+    equity_vs_opponents: 'Equity vs. Opponents',
+    equity_trend_chart_title: 'Hand Equity Trend',
+    num_opponents: 'Number of Opponents',
+    equity_percentage: 'Equity (%)',
+    opponents_short: 'opp'
   }
 };
