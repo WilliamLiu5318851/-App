@@ -614,20 +614,31 @@ function TexasHoldemAdvisor() {
     return trendData;
   };
 
-  // 2. GTO建议生成函数
-  const getGtoAdvice = (equity, potOdds, profile) => {
+  // 新增：位置对策略的影响因子
+  const POSITIONAL_ADJUSTMENTS = {
+    Tight: { equity_multiplier: 1.15, bluff_multiplier: 0.8 }, // 前位(EP): 更紧，需要更高胜率，减少诈唬
+    Normal: { equity_multiplier: 1.0, bluff_multiplier: 1.0 },  // 中位(MP): 标准
+    Loose: { equity_multiplier: 0.85, bluff_multiplier: 1.2 }, // 后位(LP): 更松，利用位置优势，增加诈唬
+    Defensive: { equity_multiplier: 1.05, bluff_multiplier: 0.9 } // 盲注位(Blinds): 偏向防守
+  };
+
+  // 2. GTO建议生成函数 (升级版：感知位置)
+  const getGtoAdvice = (equity, potOdds, profile, position) => {
     let adviceKey = 'advice_fold';
     let reasonKey = 'reason_odds';
-    const requiredEquity = potOdds * profile.equity_buffer;
+    const posData = position ? POSITIONS['en'][position] : null; // 使用 'en' 作为 key，因为 modifier 是英文
+    const adjustment = posData ? POSITIONAL_ADJUSTMENTS[posData.range_modifier] : POSITIONAL_ADJUSTMENTS.Normal;
+
+    const requiredEquity = potOdds * profile.equity_buffer * adjustment.equity_multiplier;
 
     if (parseFloat(spr) < 1.5 && equity > (strategy === 'maniac' ? 15 : 30)) {
       adviceKey = strategy === 'maniac' ? 'advice_allin_bluff' : 'advice_allin';
       reasonKey = 'reason_spr_low';
     } else if (callAmount === 0) { // We can check/bet
-      if (equity > profile.raise_threshold) {
+      if (equity > profile.raise_threshold * adjustment.equity_multiplier) {
         adviceKey = 'advice_raise';
         reasonKey = 'reason_value';
-      } else if (equity > profile.bluff_equity && strategy !== 'conservative') {
+      } else if (equity > (profile.bluff_equity / adjustment.bluff_multiplier) && strategy !== 'conservative') {
         adviceKey = strategy === 'maniac' ? 'advice_raise_bluff' : 'advice_check_call';
         reasonKey = strategy === 'maniac' ? 'reason_bluff_pure' : 'reason_bluff_semi';
       } else {
@@ -635,13 +646,13 @@ function TexasHoldemAdvisor() {
         reasonKey = 'reason_odds';
       }
     } else { // We face a bet
-      if (equity > requiredEquity + 15) {
+      if (equity > requiredEquity + (15 / adjustment.bluff_multiplier)) { // 在好位置更倾向于用强牌再加注
         adviceKey = 'advice_raise';
         reasonKey = 'reason_value';
       } else if (equity >= requiredEquity) {
         adviceKey = 'advice_call';
         reasonKey = 'reason_odds';
-      } else if (strategy === 'maniac' && equity > 15 && equity < requiredEquity) {
+      } else if (strategy === 'maniac' && equity > (15 / adjustment.bluff_multiplier) && equity < requiredEquity) {
         adviceKey = 'advice_raise_bluff';
         reasonKey = 'reason_bluff_pure';
       } else {
@@ -711,7 +722,7 @@ function TexasHoldemAdvisor() {
       const analysisKey = analyzeHandFeatures(heroHand, communityCards);
       const textureRes = analyzeBoardTexture(communityCards); 
       const profile = STRATEGY_PROFILES[strategy] || STRATEGY_PROFILES['conservative'];
-      let { adviceKey, reasonKey } = getGtoAdvice(equity, potOdds, profile);
+      let { adviceKey, reasonKey } = getGtoAdvice(equity, potOdds, profile, heroPosition);
       let finalReason = buildEnrichedReason(t[reasonKey] || `Pot Odds: ${potOdds.toFixed(1)}%`, potOdds);
 
       const analysisData = HAND_ANALYSIS_DEFINITIONS[lang][analysisKey];
