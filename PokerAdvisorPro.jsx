@@ -29,114 +29,53 @@ const { SUITS, RANKS, RANK_VALUES } = CONSTANTS;
 
 // --- 核心算法 ---
 const evaluateHand = (cards) => {
-    if (!cards || cards.length < 5) return 0;
+  if (!cards || cards.length < 5) return 0;
+  const sorted = [...cards].sort((a, b) => RANK_VALUES[b.rank] - RANK_VALUES[a.rank]);
+  const ranks = sorted.map(c => RANK_VALUES[c.rank]);
+  const suits = sorted.map(c => c.suit);
+  
+  const counts = {};
+  ranks.forEach(r => counts[r] = (counts[r] || 0) + 1);
+  const countValues = Object.values(counts);
+  
+  const suitCounts = {};
+  suits.forEach(s => suitCounts[s] = (suitCounts[s] || 0) + 1);
+  let flushSuit = Object.keys(suitCounts).find(s => suitCounts[s] >= 5);
+  
+  const uniqueRanks = [...new Set(ranks)].sort((a,b) => b-a);
+  let straightHigh = 0;
+  for (let i = 0; i <= uniqueRanks.length - 5; i++) {
+    if (uniqueRanks[i] - uniqueRanks[i+4] === 4) { straightHigh = uniqueRanks[i]; break; }
+  }
+  if (!straightHigh && uniqueRanks.includes(14) && uniqueRanks.includes(2) && uniqueRanks.includes(3) && uniqueRanks.includes(4) && uniqueRanks.includes(5)) straightHigh = 5;
 
-    const scoreFromRanks = (base, rankValues) => {
-        let score = base;
-        // Use powers of 15 to ensure no overlap between ranks (2-14)
-        for (let i = 0; i < Math.min(rankValues.length, 5); i++) {
-            score += rankValues[i] * Math.pow(15, 4 - i);
-        }
-        return score;
-    };
+  let isFlush = !!flushSuit;
+  let isStraight = straightHigh > 0;
 
-    const ranks = cards.map(c => RANK_VALUES[c.rank]).sort((a, b) => b - a);
-    const suits = cards.map(c => c.suit);
-    
-    const counts = {};
-    ranks.forEach(r => { counts[r] = (counts[r] || 0) + 1; });
-    
-    const suitCounts = {};
-    suits.forEach(s => { suitCounts[s] = (suitCounts[s] || 0) + 1; });
-    const flushSuit = Object.keys(suitCounts).find(s => suitCounts[s] >= 5);
-
-    const uniqueRanks = [...new Set(ranks)];
-    let straightHigh = 0;
-    // Ace-low straight check
-    if (uniqueRanks.includes(14) && uniqueRanks.includes(5) && uniqueRanks.includes(4) && uniqueRanks.includes(3) && uniqueRanks.includes(2)) {
-        const aceLowRanks = [5,4,3,2,1];
-        straightHigh = 5;
-    } else {
-        for (let i = 0; i <= uniqueRanks.length - 5; i++) {
-            if (uniqueRanks[i] - uniqueRanks[i+4] === 4) {
-                straightHigh = uniqueRanks[i];
-                break;
-            }
-        }
-    }
-
-    // Straight Flush
-    if (flushSuit) {
-        const flushRanks = cards.filter(c => c.suit === flushSuit).map(c => RANK_VALUES[c.rank]);
-        const uniqueFlushRanks = [...new Set(flushRanks)].sort((a,b) => b-a);
-        let flushStraightHigh = 0;
-        if (uniqueFlushRanks.includes(14) && uniqueFlushRanks.includes(5) && uniqueFlushRanks.includes(4) && uniqueFlushRanks.includes(3) && uniqueFlushRanks.includes(2)) {
-            flushStraightHigh = 5;
-        } else {
-            for (let i = 0; i <= uniqueFlushRanks.length - 5; i++) {
-                if (uniqueFlushRanks.length >= 5 && uniqueFlushRanks[i] - uniqueFlushRanks[i+4] === 4) {
-                    flushStraightHigh = uniqueFlushRanks[i];
-                    break;
-                }
-            }
-        }
-        if (flushStraightHigh > 0) return 8000000 + flushStraightHigh;
-    }
-
-    const quadRanks = Object.keys(counts).filter(r => counts[r] === 4).map(Number);
-    if (quadRanks.length > 0) {
-        const main = quadRanks[0];
-        const kickers = ranks.filter(r => r !== main).slice(0, 1);
-        return scoreFromRanks(7000000, [main, ...kickers]);
-    }
-
-    const tripRanks = Object.keys(counts).filter(r => counts[r] === 3).map(Number).sort((a, b) => b - a);
-    const pairRanks = Object.keys(counts).filter(r => counts[r] === 2).map(Number).sort((a, b) => b - a);
-    
-    // Full House
-    if (tripRanks.length > 0) {
-        if (tripRanks.length > 1) { // Two sets, highest makes the boat
-            return scoreFromRanks(6000000, [tripRanks[0], tripRanks[1]]);
-        }
-        if (pairRanks.length > 0) {
-            return scoreFromRanks(6000000, [tripRanks[0], pairRanks[0]]);
-        }
-    }
-
-    // Flush
-    if (flushSuit) {
-        const flushRanks = cards.filter(c => c.suit === flushSuit).map(c => RANK_VALUES[c.rank]).sort((a,b)=>b-a);
-        return scoreFromRanks(5000000, flushRanks.slice(0, 5));
-    }
-
-    // Straight
-    if (straightHigh > 0) {
-        return 4000000 + straightHigh;
-    }
-
-    // Three of a Kind
-    if (tripRanks.length > 0) {
-        const main = tripRanks[0];
-        const kickers = ranks.filter(r => r !== main).slice(0, 2);
-        return scoreFromRanks(3000000, [main, ...kickers]);
-    }
-
-    // Two Pair
-    if (pairRanks.length >= 2) {
-        const main = [pairRanks[0], pairRanks[1]];
-        const kickers = ranks.filter(r => r !== main[0] && r !== main[1]).slice(0, 1);
-        return scoreFromRanks(2000000, [...main, ...kickers]);
-    }
-
-    // One Pair
-    if (pairRanks.length === 1) {
-        const main = pairRanks[0];
-        const kickers = ranks.filter(r => r !== main).slice(0, 3);
-        return scoreFromRanks(1000000, [main, ...kickers]);
-    }
-
-    // High Card
-    return scoreFromRanks(0, ranks.slice(0, 5));
+  if (isFlush && isStraight) return 8000000 + straightHigh; 
+  if (countValues.includes(4)) {
+      const quadRank = Object.keys(counts).find(r => counts[r] === 4);
+      return 7000000 + Number(quadRank);
+  }
+  if (countValues.includes(3) && countValues.includes(2)) {
+      const tripRank = Object.keys(counts).find(r => counts[r] === 3);
+      return 6000000 + Number(tripRank);
+  }
+  if (isFlush) return 5000000 + ranks[0]; 
+  if (isStraight) return 4000000 + straightHigh;
+  if (countValues.includes(3)) {
+      const tripRank = Object.keys(counts).find(r => counts[r] === 3);
+      return 3000000 + Number(tripRank);
+  }
+  if (countValues.filter(c => c === 2).length >= 2) {
+      const pairs = Object.keys(counts).filter(r => counts[r] === 2).map(Number).sort((a,b)=>b-a);
+      return 2000000 + (pairs[0] * 100) + pairs[1];
+  }
+  if (countValues.includes(2)) {
+      const pairRank = Object.keys(counts).find(r => counts[r] === 2);
+      return 1000000 + (Number(pairRank) * 100);
+  }
+  return ranks[0];
 };
 
 const analyzeBoardTexture = (communityCards) => {
@@ -236,25 +175,17 @@ const analyzeHandFeatures = (heroCards, communityCards) => {
       }
   }
 
-  if (score >= 2000000 && score < 3000000) {
-      return "made_two_pair";
-  }
-  if (score >= 1000000 && score < 2000000) {
-      const pairRank = Math.floor((score - 1000000) / Math.pow(15, 4));
-      
-      if (isPair && h1 === pairRank && (boardRanks.length > 0 && h1 > maxBoard)) {
-          return "over_pair";
-      }
-
-      if (boardRanks.length > 0) {
-        if (pairRank === maxBoard) {
-            if (isFlushDraw || isStraightDraw) return "top_pair_with_draw";
-            return "top_pair";
+  if (score >= 2000000) return "top_pair"; 
+  if (score >= 1000000) {
+      const pairRank = Math.floor((score - 1000000) / 100);
+      if (pairRank === maxBoard) {
+        // 检查是否是顶对+听牌
+        if (isFlushDraw || isStraightDraw) {
+          return "top_pair_with_draw";
         }
-        if (pairRank > boardRanks[boardRanks.length - 1]) {
-            return "middle_pair";
-        }
+        return "top_pair";
       }
+      if (pairRank > boardRanks[boardRanks.length-1]) return "middle_pair";
       return "bottom_pair";
   }
 
@@ -473,7 +404,7 @@ function TexasHoldemAdvisor() {
       let potSize = 0; let contributors = 0; let heroInvolved = false;
       if (heroTotal > prevCap) { potSize += Math.min(amount, heroTotal - prevCap); heroInvolved = true; contributors++; }
       opps.forEach(p => { if (p.finalTotal > prevCap) { potSize += Math.min(amount, p.finalTotal - prevCap); if (p.active) contributors++; } });
-      if (potSize > 0) segments.push({ id: cap, amount: potSize, contestants: contributors, result: 'loss', heroInvolved });
+      if (potSize > 0 && heroInvolved) segments.push({ id: cap, amount: potSize, contestants: contributors, result: 'loss' });
       prevCap = cap;
     });
     setPotSegments(segments); setSettlementMode(true);
@@ -632,12 +563,12 @@ function TexasHoldemAdvisor() {
             <div className="bg-slate-900 border border-slate-700 rounded-xl p-4 space-y-3">
               <h2 className="text-center text-xl font-bold text-indigo-200">{t.settle_title}</h2>
               {potSegments.map((seg, idx) => (
-               <div key={idx} className={`bg-slate-800 p-3 rounded border border-slate-700 flex justify-between items-center ${!seg.heroInvolved && 'opacity-50'}`}>
+               <div key={idx} className="bg-slate-800 p-3 rounded border border-slate-700 flex justify-between items-center">
                  <span className="text-sm font-bold text-slate-300 flex gap-2 items-center"><ShieldCheck className="w-4 h-4"/> {idx===0?t.segment_main:`${t.segment_side} ${idx}`} (${seg.amount})</span>
                  <div className="flex gap-1">
-                   <button onClick={() => seg.heroInvolved && updateSegmentResult(idx, 'win')} disabled={!seg.heroInvolved} className={`px-2 py-1 text-xs rounded border ${seg.result==='win'?'bg-emerald-600 text-white border-emerald-500':'bg-slate-700 text-slate-400 border-slate-600'} disabled:opacity-50 disabled:cursor-not-allowed`}>{t.settle_win}</button>
-                   <button onClick={() => seg.heroInvolved && updateSegmentResult(idx, 'split')} disabled={!seg.heroInvolved} className={`px-2 py-1 text-xs rounded border ${seg.result==='split'?'bg-blue-600 text-white border-blue-500':'bg-slate-700 text-slate-400 border-slate-600'} disabled:opacity-50 disabled:cursor-not-allowed`}>{t.settle_split}</button>
-                   <button onClick={() => seg.heroInvolved && updateSegmentResult(idx, 'loss')} disabled={!seg.heroInvolved} className={`px-2 py-1 text-xs rounded border ${seg.result==='loss'?'bg-red-900/50 text-red-200 border-red-800':'bg-slate-700 text-slate-400 border-slate-600'} disabled:opacity-50 disabled:cursor-not-allowed`}>{t.settle_loss}</button>
+                   <button onClick={() => updateSegmentResult(idx, 'win')} className={`px-2 py-1 text-xs rounded border ${seg.result==='win'?'bg-emerald-600 text-white border-emerald-500':'bg-slate-700 text-slate-400 border-slate-600'}`}>{t.settle_win}</button>
+                   <button onClick={() => updateSegmentResult(idx, 'split')} className={`px-2 py-1 text-xs rounded border ${seg.result==='split'?'bg-blue-600 text-white border-blue-500':'bg-slate-700 text-slate-400 border-slate-600'}`}>{t.settle_split}</button>
+                   <button onClick={() => updateSegmentResult(idx, 'loss')} className={`px-2 py-1 text-xs rounded border ${seg.result==='loss'?'bg-red-900/50 text-red-200 border-red-800':'bg-slate-700 text-slate-400 border-slate-600'}`}>{t.settle_loss}</button>
                  </div>
                </div>
              ))}

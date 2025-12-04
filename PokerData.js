@@ -116,8 +116,6 @@ window.PokerData.HAND_ANALYSIS_DEFINITIONS = {
     made_flush: { label: "同花 (Flush)", advice: "价值/保护", reason: "小心A花或公对(葫芦)。" },
     made_straight: { label: "顺子 (Straight)", advice: "积极进攻", reason: "大牌，但在同花面要小心。" },
     monster: { label: "三条 (Trips/Set)", advice: "强力价值", reason: "隐蔽性强，造大底池！" },
-    made_two_pair: { label: "两对 (Two Pair)", advice: "价值/保护", reason: "强牌，但在危险的牌面上要小心。" },
-    over_pair: { label: "超对 (Overpair)", advice: "强力价值", reason: "强于顶对的口袋对，大力价值下注。" },
     
     top_pair: { label: "顶对 (Top Pair)", advice: "价值/控池", reason: "通常领先，湿润面别打太深。" },
     top_pair_with_draw: { label: "顶对+听牌", advice: "积极进攻", reason: "领先且有后备计划，应主动进攻。" },
@@ -160,8 +158,6 @@ window.PokerData.HAND_ANALYSIS_DEFINITIONS = {
     made_flush: { label: "Flush", advice: "Value/Protect", reason: "Watch out for Ace flush or Full House." },
     made_straight: { label: "Straight", advice: "Attack", reason: "Strong hand. Be careful on flushed boards." },
     monster: { label: "Set/Trips", advice: "Value", reason: "Very strong. Build a big pot!" },
-    made_two_pair: { label: "Two Pair", advice: "Value/Protect", reason: "Strong hand, but be careful on scary boards." },
-    over_pair: { label: "Overpair", advice: "Strong Value", reason: "A pocket pair stronger than the top card on board. Bet for strong value." },
 
     top_pair: { label: "Top Pair", advice: "Value/Control", reason: "Usually ahead. Don't overplay on wet boards." },
     top_pair_with_draw: { label: "Top Pair + Draw", advice: "Attack", reason: "You are ahead with a backup plan. Be aggressive." },
