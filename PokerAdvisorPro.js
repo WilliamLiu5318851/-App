@@ -5,7 +5,7 @@ import CardIcon from './CardIcon.js';
 import SettingsPanel from './SettingsPanel.js';
 import DrawProbabilityChart from './DrawProbabilityChart.js';
 import CardSelector from './CardSelector.js';
-import PositionSelector from './PositionSelector.jsx';
+import PositionSelector from './PositionSelector.js';
 
 // 安全获取数据层
 const PokerData = window.PokerData || { 

@@ -1,6 +1,6 @@
 import React from 'react';
 import { X } from 'lucide-react';
-import CardIcon from './CardIcon.jsx';
+import CardIcon from './CardIcon.js';
 
 const SUITS = ['s', 'h', 'd', 'c'];
 const RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A'];
