@@ -18,8 +18,8 @@ const { CONSTANTS, HAND_ANALYSIS_DEFINITIONS, TEXTURE_STRATEGIES, POSITIONS, STR
 const { SUITS, RANKS, RANK_VALUES, PREFLOP_CHARTS, MATCHUP_EQUITY } = CONSTANTS; // Assuming PREFLOP_CHARTS and MATCHUP_EQUITY are part of CONSTANTS
 
 // 注册 Chart.js 必要的组件
-import { Chart, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
-Chart.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
+import { Chart, LineController, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
+Chart.register(LineController, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
 /**
  * 德州扑克助手 Pro (v7.0 - Strict Logic)

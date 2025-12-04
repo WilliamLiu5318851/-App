@@ -47,8 +47,10 @@
     <script>
         window.addEventListener('error', e => {
             const el = document.getElementById('error-display');
-            el.style.display = 'block';
-            el.innerText = `❌ 程序错误: ${e.message}`;
+            if (el) {
+                el.style.display = 'block';
+                el.innerText = `❌ 程序错误: ${e.message}`;
+            }
         });
     </script>
 
