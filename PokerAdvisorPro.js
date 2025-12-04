@@ -468,149 +468,150 @@ function TexasHoldemAdvisor() {
   const safeCallAmount = Math.min(maxBet - heroBet, heroStack);
   const isCallAllIn = isCallAction && (maxBet >= heroStack);
 
-  const calculateEquity = () => {
+  // --- 重构后的核心逻辑 ---
+
+  // 1. 蒙特卡洛模拟函数
+  const runMonteCarloSimulation = () => {
+    const SIMULATIONS = 1500;
+    let wins = 0, ties = 0;
+    const activeOpponents = players.filter(p => p.active).length;
+
+    const knownCards = [...heroHand, ...communityCards].filter(Boolean);
+    const knownCardSet = new Set(knownCards.map(c => `${c.rank}${c.suit}`));
+    let simulationDeck = [];
+    for (let d = 0; d < deckCount; d++) {
+      for (const s of SUITS) {
+        for (const r of RANKS) {
+          if (!knownCardSet.has(`${r}${s}`)) {
+            simulationDeck.push({ rank: r, suit: s });
+          }
+        }
+      }
+    }
+
+    const boardRunout = communityCards.filter(Boolean);
+    const cardsForBoard = 5 - boardRunout.length;
+    const cardsForOpponents = activeOpponents * 2;
+
+    for (let i = 0; i < SIMULATIONS; i++) {
+      for (let j = simulationDeck.length - 1; j > 0; j--) {
+        const k = Math.floor(Math.random() * (j + 1));
+        [simulationDeck[j], simulationDeck[k]] = [simulationDeck[k], simulationDeck[j]];
+      }
+
+      const drawnCards = simulationDeck.slice(0, cardsForBoard + cardsForOpponents);
+      const runout = drawnCards.slice(0, cardsForBoard);
+      const finalBoard = [...boardRunout, ...runout];
+      
+      const heroScore = evaluateHand([...heroHand, ...finalBoard]);
+      let heroWins = true, isTie = false;
+
+      for (let p = 0; p < activeOpponents; p++) {
+        const oppHand = drawnCards.slice(cardsForBoard + p * 2, cardsForBoard + p * 2 + 2);
+        const oppScore = evaluateHand([...oppHand, ...finalBoard]);
+        if (oppScore > heroScore) { heroWins = false; break; }
+        if (oppScore === heroScore) isTie = true;
+      }
+
+      if (heroWins && !isTie) wins++;
+      if (heroWins && isTie) ties++;
+    }
+
+    return ((wins + (ties / 2)) / SIMULATIONS) * 100;
+  };
+
+  // 2. GTO建议生成函数
+  const getGtoAdvice = (equity, potOdds, profile) => {
+    let adviceKey = 'advice_fold';
+    let reasonKey = 'reason_odds';
+    const requiredEquity = potOdds * profile.equity_buffer;
+
+    if (parseFloat(spr) < 1.5 && equity > (strategy === 'maniac' ? 15 : 30)) {
+      adviceKey = strategy === 'maniac' ? 'advice_allin_bluff' : 'advice_allin';
+      reasonKey = 'reason_spr_low';
+    } else if (callAmount === 0) { // We can check/bet
+      if (equity > profile.raise_threshold) {
+        adviceKey = 'advice_raise';
+        reasonKey = 'reason_value';
+      } else if (equity > profile.bluff_equity && strategy !== 'conservative') {
+        adviceKey = strategy === 'maniac' ? 'advice_raise_bluff' : 'advice_check_call';
+        reasonKey = strategy === 'maniac' ? 'reason_bluff_pure' : 'reason_bluff_semi';
+      } else {
+        adviceKey = 'advice_check_call';
+        reasonKey = 'reason_odds';
+      }
+    } else { // We face a bet
+      if (equity > requiredEquity + 15) {
+        adviceKey = 'advice_raise';
+        reasonKey = 'reason_value';
+      } else if (equity >= requiredEquity) {
+        adviceKey = 'advice_call';
+        reasonKey = 'reason_odds';
+      } else if (strategy === 'maniac' && equity > 15 && equity < requiredEquity) {
+        adviceKey = 'advice_raise_bluff';
+        reasonKey = 'reason_bluff_pure';
+      } else {
+        adviceKey = 'advice_fold';
+      }
+    }
+    return { adviceKey, reasonKey };
+  };
+
+  // 3. 丰富建议理由的辅助函数
+  const buildEnrichedReason = (baseReason, potOdds) => {
+    let reason = baseReason;
+    const posData = heroPosition ? POSITIONS[lang][heroPosition] : null;
+    if (posData) {
+      reason += `\n[${posData.label}]: ${posData.action_plan}`;
+    }
+
+    if (street === 0 && heroPosition && PREFLOP_CHARTS) {
+      const chart = PREFLOP_CHARTS['6max_100bb']?.[heroPosition];
+      if (chart) {
+        const recommendedRange = parseRangeString(chart);
+        const heroHandNotation = getHandNotation(heroHand);
+        reason += `\n${recommendedRange.has(heroHandNotation) ? '✅' : '❌'} ${t[recommendedRange.has(heroHandNotation) ? 'in_position_range' : 'out_of_position_range']}`;
+      }
+    }
+
+    if (street === 0 && MATCHUP_EQUITY) {
+      const heroHandNotation = getHandNotation(heroHand);
+      for (const key in MATCHUP_EQUITY) {
+        const matchup = MATCHUP_EQUITY[key];
+        if (matchup.hero === heroHandNotation || matchup.villain === heroHandNotation) {
+          const isHero = matchup.hero === heroHandNotation;
+          const eq = isHero ? matchup.equity : 100 - matchup.equity;
+          const opp = isHero ? matchup.villain : matchup.hero;
+          reason += `\n\n💡 ${t.classic_matchup}: vs ${opp}, ${matchup[`description_${lang}`]} (~${eq.toFixed(1)}%)`;
+          break;
+        }
+      }
+    }
+    return reason;
+  };
+
+  // 4. 主计算流程
+  const calculateEquity = async () => {
     if (heroHand.some(c => c === null)) return;
     setIsCalculating(true);
     setResult(null);
 
-    setTimeout(() => {
-      // 1. 蒙特卡洛模拟 (优化版)
-      const SIMULATIONS = 1500;
-      let wins = 0, ties = 0;
-      const activeOpponents = players.filter(p => p.active).length;
+    // 使用setTimeout来确保UI更新（加载状态），然后执行计算
+    await new Promise(resolve => setTimeout(resolve, 50));
 
-      // 优化点 1: 预先构建模拟牌组
-      const knownCards = [...heroHand, ...communityCards].filter(Boolean);
-      const knownCardSet = new Set(knownCards.map(c => `${c.rank}${c.suit}`));
-      let simulationDeck = [];
-      for (let d = 0; d < deckCount; d++) {
-        for (const s of SUITS) {
-          for (const r of RANKS) {
-            if (!knownCardSet.has(`${r}${s}`)) {
-              simulationDeck.push({ rank: r, suit: s });
-            }
-          }
-        }
-      }
-
-      for (let i = 0; i < SIMULATIONS; i++) {
-        // 优化点 2: 高效洗牌与发牌
-        for (let j = simulationDeck.length - 1; j > 0; j--) { const k = Math.floor(Math.random() * (j + 1)); [simulationDeck[j], simulationDeck[k]] = [simulationDeck[k], simulationDeck[j]]; }
-        
-        const boardRunout = communityCards.filter(Boolean);
-        const cardsToDraw = 5 - boardRunout.length + activeOpponents * 2;
-        const drawnCards = simulationDeck.slice(0, cardsToDraw);
-        const heroScore = evaluateHand([...heroHand, ...boardRunout, ...drawnCards.slice(0, 5 - boardRunout.length)]);
-        let heroWins = true; let isTie = false;
-        for (let p = 0; p < activeOpponents; p++) { const oppHand = drawnCards.slice(5 - boardRunout.length + p * 2, 5 - boardRunout.length + p * 2 + 2); const s = evaluateHand([...oppHand, ...boardRunout, ...drawnCards.slice(0, 5 - boardRunout.length)]); if (s > heroScore) { heroWins = false; break; } if (s === heroScore) isTie = true; }
-        if (heroWins && !isTie) wins++; if (heroWins && isTie) ties++;
-      }
-      const equity = ((wins + (ties/2)) / SIMULATIONS) * 100;
-      
-      // 2. 特征与纹理分析
+    try {
+      const equity = runMonteCarloSimulation();
       const potOdds = totalPot > 0 ? (callAmount / (totalPot + callAmount)) * 100 : 0;
       const analysisKey = analyzeHandFeatures(heroHand, communityCards);
       const textureRes = analyzeBoardTexture(communityCards); 
-      const textureKey = textureRes.pattern;
-      const textureType = textureRes.type;
-
-      // 3. 数据获取
-      const analysisData = analysisKey ? HAND_ANALYSIS_DEFINITIONS[lang][analysisKey] : null;
-      const textureStrategy = textureKey ? TEXTURE_STRATEGIES[lang][textureKey] : null;
-      const posData = heroPosition ? POSITIONS[lang][heroPosition] : null;
-      
-      // 4. 生成建议
       const profile = STRATEGY_PROFILES[strategy] || STRATEGY_PROFILES['conservative'];
-      
-      let adviceKey = 'advice_fold';
-      let reasonKey = 'reason_odds';
+      let { adviceKey, reasonKey } = getGtoAdvice(equity, potOdds, profile);
+      let finalReason = buildEnrichedReason(t[reasonKey] || `Pot Odds: ${potOdds.toFixed(1)}%`, potOdds);
 
-      let requiredEquity = potOdds * profile.equity_buffer; 
+      const analysisData = HAND_ANALYSIS_DEFINITIONS[lang][analysisKey];
+      const textureStrategy = TEXTURE_STRATEGIES[lang][textureRes.pattern];
+      const drawStats = PROBABILITIES.outs_lookup[analysisKey];
 
-      if (parseFloat(spr) < 1.5 && equity > (strategy === 'maniac' ? 15 : 30)) {
-        adviceKey = strategy === 'maniac' ? 'advice_allin_bluff' : 'advice_allin';
-        reasonKey = 'reason_spr_low';
-      } else if (callAmount === 0) {
-        if (equity > profile.raise_threshold) { 
-          adviceKey = 'advice_raise';
-          reasonKey = 'reason_value';
-        } else if (equity > profile.bluff_equity && strategy !== 'conservative') { 
-          adviceKey = strategy === 'maniac' ? 'advice_raise_bluff' : 'advice_check_call';
-          reasonKey = strategy === 'maniac' ? 'reason_bluff_pure' : 'reason_bluff_semi';
-        } else {
-          adviceKey = 'advice_check_call';
-          reasonKey = 'reason_odds';
-        }
-      } else {
-        if (equity > requiredEquity + 15) {
-           adviceKey = 'advice_raise';
-           reasonKey = 'reason_value';
-        } else if (equity >= requiredEquity) {
-           adviceKey = 'advice_call';
-           reasonKey = 'reason_odds';
-        } else if (strategy === 'maniac' && equity > 15 && equity < requiredEquity) {
-           adviceKey = 'advice_raise_bluff'; 
-           reasonKey = 'reason_bluff_pure';
-        } else {
-           adviceKey = 'advice_fold';
-        }
-      }
-
-      // 位置修正
-      let finalReason = t[reasonKey] || `Pot Odds: ${potOdds.toFixed(1)}%`;
-      if (posData) {
-         finalReason += `\n[${posData.label}]: ${posData.action_plan}`;
-         if (posData.range_modifier === 'Tight' && adviceKey === 'advice_call' && equity < 40) adviceKey = 'advice_fold';
-      }
-
-      // 翻牌前范围检查 (Pre-flop Range Check)
-      if (street === 0 && heroPosition && PREFLOP_CHARTS) {
-        const chart = PREFLOP_CHARTS['6max_100bb']; // 可根据桌子人数动态选择
-        if (chart && chart[heroPosition]) {
-          const recommendedRange = parseRangeString(chart[heroPosition]);
-          const heroHandNotation = getHandNotation(heroHand);
-          if (recommendedRange.has(heroHandNotation)) {
-            finalReason += `\n✅ ${t.in_position_range || 'In Position Range'}`;
-          } else {
-            finalReason += `\n❌ ${t.out_of_position_range || 'Out of Position Range'}`;
-          }
-        }
-      }
-
-      // 经典对抗分析 (Classic Matchup Analysis)
-      if (street === 0 && MATCHUP_EQUITY) {
-        const heroHandNotation = getHandNotation(heroHand);
-        for (const key in MATCHUP_EQUITY) {
-          const matchup = MATCHUP_EQUITY[key];
-          if (matchup.hero === heroHandNotation || matchup.villain === heroHandNotation) {
-            const isHeroPerspective = matchup.hero === heroHandNotation;
-            const equityPerspective = isHeroPerspective ? matchup.equity : (100 - matchup.equity);
-            const opponentHand = isHeroPerspective ? matchup.villain : matchup.hero;
-            const description = lang === 'zh' ? matchup.description_zh : matchup.description_en;
-            finalReason += `\n\n💡 ${t.classic_matchup || 'Classic Matchup'}: vs ${opponentHand}, ${description} (胜率约 ${equityPerspective.toFixed(1)}%)`;
-            break; // 只显示第一个匹配的经典对抗
-          }
-        }
-      }
-
-      let finalAdvice = t[adviceKey] || "Advice N/A";
-
-      // 听牌数学
-      let drawStats = null;
-      if (PROBABILITIES && PROBABILITIES.outs_lookup && PROBABILITIES.outs_lookup[analysisKey]) {
-         const d = PROBABILITIES.outs_lookup[analysisKey];
-         drawStats = { label: d.label, outs: d.outs, equityFlop: d.equityFlop, advice: d.advice };
-         finalReason += `\n🎲 ${d.label}: ${d.outs} Outs (~${d.outs * 4}% Equity)`;
-      }
-
-      // 5. 纹理建议
-      if (textureStrategy && callAmount === 0 && !analysisKey?.startsWith('made_')) {
-          finalReason += `\n[${textureStrategy.name}]: ${textureStrategy.desc}`;
-      }
-      
-      if (analysisData && drawStats) finalReason += `\n🎲 ${drawStats.label} (${drawStats.outs} Outs)`;
-      
-      // 6. 动态下注尺度
       let betSizes = null;
       if (adviceKey.includes('raise') || adviceKey.includes('allin')) {
          const p = totalPot, s = heroStack;
@@ -625,19 +626,26 @@ function TexasHoldemAdvisor() {
          };
       }
 
+      if (drawStats) {
+        finalReason += `\n🎲 ${drawStats.label}: ${drawStats.outs} Outs (~${drawStats.outs * 4}%)`;
+      }
+
       setResult({
         equity: equity.toFixed(1),
-        advice: finalAdvice,
+        advice: t[adviceKey] || "Advice N/A",
         reason: finalReason,
-        handTypeLabel: analysisData ? analysisData.label : null,
-        textureLabel: textureStrategy ? textureStrategy.name : null,
-        textureType,
+        handTypeLabel: analysisData?.label,
+        textureLabel: textureStrategy?.name,
+        textureType: textureRes.type,
         drawStats,
         betSizes,
         isBluff: adviceKey.includes('bluff')
       });
+    } catch (error) {
+      console.error("Error during equity calculation:", error);
+    } finally {
       setIsCalculating(false);
-    }, 50);
+    }
   };
 
   const handleHeroBetChange = (val) => setHeroBet(val === '' ? 0 : Math.min(Number(val), heroStack));
