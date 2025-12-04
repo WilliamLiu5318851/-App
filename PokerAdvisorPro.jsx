@@ -147,6 +147,11 @@ const analyzeHandFeatures = (heroCards, communityCards) => {
   if (score >= 4000000) return "made_straight";
   if (score >= 3000000) return "monster"; 
 
+  // 听牌检测 (提前计算，但不立即返回)
+  let isFlushDraw = false;
+  let isNutFD = false;
+  let isStraightDraw = false;
+
   if (!isRiver) {
       const suits = {};
       const ranks = [];
@@ -156,28 +161,34 @@ const analyzeHandFeatures = (heroCards, communityCards) => {
       });
       
       const fdSuit = Object.keys(suits).find(s => suits[s] === 4);
-      let isFlushDraw = !!fdSuit;
-      let isNutFD = isFlushDraw && ((heroCards[0].suit === fdSuit && h1_rank === 14) || (heroCards[1].suit === fdSuit && h2_rank === 14));
+      isFlushDraw = !!fdSuit;
+      isNutFD = isFlushDraw && ((heroCards[0].suit === fdSuit && h1_rank === 14) || (heroCards[1].suit === fdSuit && h2_rank === 14));
       
       const uRanks = [...new Set(ranks)].sort((a,b)=>a-b);
-      let isStraightDraw = false;
       for(let i=0; i<=uRanks.length-4; i++) {
           if (uRanks[i+3] - uRanks[i] <= 4) isStraightDraw = true;
       }
-
-      if (isFlushDraw && isStraightDraw) return "combo_draw";
-      if (isNutFD) return "flush_draw_nut";
-      if (isFlushDraw) return "flush_draw";
-      if (isStraightDraw) return "straight_draw_oesd";
   }
 
   if (score >= 2000000) return "top_pair"; 
   if (score >= 1000000) {
       const pairRank = Math.floor((score - 1000000) / 100);
-      if (pairRank === maxBoard) return "top_pair";
+      if (pairRank === maxBoard) {
+        // 检查是否是顶对+听牌
+        if (isFlushDraw || isStraightDraw) {
+          return "top_pair_with_draw";
+        }
+        return "top_pair";
+      }
       if (pairRank > boardRanks[boardRanks.length-1]) return "middle_pair";
       return "bottom_pair";
   }
+
+  // 如果没有成对，再返回听牌类型
+  if (isFlushDraw && isStraightDraw) return "combo_draw";
+  if (isNutFD) return "flush_draw_nut";
+  if (isFlushDraw) return "flush_draw";
+  if (isStraightDraw) return "straight_draw_oesd";
 
   // Post-flop Logic
   if (h1 > maxBoard && h2 > maxBoard) return "overcards"; 
@@ -337,27 +348,20 @@ function TexasHoldemAdvisor() {
          finalReason += `\n🎲 ${d.label}: ${d.outs} Outs (~${d.outs * 4}% Equity)`;
       }
 
-      // 纹理建议
+      // 5. 纹理建议
       if (textureStrategy && callAmount === 0 && !analysisKey?.startsWith('made_')) {
           finalReason += `\n[${textureStrategy.name}]: ${textureStrategy.desc}`;
       }
-
-      // 手牌库覆盖 (包括新逻辑)
-      if (analysisData) {
-         finalReason = analysisData.reason; 
-         // Fix: 强制覆盖所有定义过的牌型（包括 pre_trash, pre_high_card, high_card_weak）
-         if (analysisKey.startsWith('made_') || analysisKey.includes('monster') || analysisKey.includes('pair') || analysisKey.includes('high_card') || analysisKey.includes('trash')) {
-             finalAdvice = analysisData.advice;
-         }
-         if (drawStats) finalReason += `\n🎲 ${drawStats.label} (${drawStats.outs} Outs)`;
-      }
-
-      // 5. 动态下注尺度
+      
+      if (analysisData && drawStats) finalReason += `\n🎲 ${drawStats.label} (${drawStats.outs} Outs)`;
+      
+      // 6. 动态下注尺度
       let betSizes = null;
       if (adviceKey.includes('raise') || adviceKey.includes('allin')) {
          const p = totalPot, s = heroStack;
          const cap = (val) => Math.min(val, s);
-         const bs = profile.bet_sizing;
+         const isBluff = adviceKey.includes('bluff');
+         const bs = isBluff ? profile.bet_sizing.bluff : profile.bet_sizing.value;
          
          betSizes = { 
            smart: cap(Math.round(p * bs.small)), 

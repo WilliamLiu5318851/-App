@@ -22,25 +22,37 @@ window.PokerData.STRATEGY_PROFILES = {
     label_zh: "保守型 (Tight)",
     label_en: "Conservative",
     equity_buffer: 1.2, // 提高跟注门槛
-    raise_threshold: 75,
-    bluff_equity: 100,
-    bet_sizing: { small: 0.33, med: 0.5, large: 0.66 }
+    raise_threshold: 75, // 价值加注所需胜率
+    bluff_equity: 100, // 半诈唬所需胜率 (100表示永不)
+    three_bet_bluff_freq: 0.05, // 3-Bet诈唬频率
+    bet_sizing: { 
+      value: { small: 0.33, med: 0.5, large: 0.66 },
+      bluff: { small: 0.33, med: 0.5, large: 0.5 } // 保守型诈唬也用小注
+    }
   },
   aggressive: {
     label_zh: "激进型 (Aggressive)",
     label_en: "Aggressive",
     equity_buffer: 0.95,
     raise_threshold: 50,
-    bluff_equity: 30,
-    bet_sizing: { small: 0.5, med: 0.75, large: 1.0 }
+    bluff_equity: 30, 
+    three_bet_bluff_freq: 0.15,
+    bet_sizing: { 
+      value: { small: 0.5, med: 0.75, large: 1.0 },
+      bluff: { small: 0.5, med: 0.66, large: 0.75 }
+    }
   },
   maniac: {
     label_zh: "疯鱼型 (Maniac)",
     label_en: "Maniac",
     equity_buffer: 0.7,
     raise_threshold: 30,
-    bluff_equity: 15,
-    bet_sizing: { small: 0.75, med: 1.2, large: 2.0 }
+    bluff_equity: 15, 
+    three_bet_bluff_freq: 0.30,
+    bet_sizing: { 
+      value: { small: 0.66, med: 1.0, large: 1.5 },
+      bluff: { small: 0.75, med: 1.2, large: 2.0 } // 疯子诈唬可以用超池
+    }
   }
 };
 
@@ -60,20 +72,6 @@ window.PokerData.POSITIONS = {
   }
 };
 
-// --- D. 牌面纹理定义 ---
-window.PokerData.BOARD_TEXTURES = {
-  zh: {
-    dry: { label: "干燥牌面 (Dry)", features: ["杂色", "不连张"], strategy_adjustment: "high_fold_equity" },
-    wet: { label: "潮湿牌面 (Wet)", features: ["同花/连张", "公对"], strategy_adjustment: "pot_control" }
-  },
-  en: {
-    dry: { label: "Dry Board", features: ["Rainbow", "Disconnected"], strategy_adjustment: "high_fold_equity" },
-    wet: { label: "Wet Board", features: ["Suited/Connected", "Paired"], strategy_adjustment: "pot_control" }
-  }
-};
-
-window.PokerData.TEXTURE_EXPLANATION = { zh: {}, en: {} };
-
 // --- E. 数学概率 ---
 window.PokerData.PROBABILITIES = {
   flop_hit: {
@@ -90,11 +88,6 @@ window.PokerData.PROBABILITIES = {
     flush_draw_nut: { label: "坚果花听牌 (Nut FD)", outs: 9, equity_flop: 36, advice: "极强！有摊牌价值+听牌价值" },
     combo_draw: { label: "双重听牌 (Combo Draw)", outs: 15, equity_flop: 54, advice: "超级强牌！直接 All-in！" }
   }
-};
-
-window.PokerData.STRATEGY_CONFIG = {
-  preflop: { open_raise_base: 3.0, iso_raise_per_limper: 1.0, min_equity_to_call: 33 },
-  postflop: { cbet_dry: 0.33, cbet_wet: 0.66, value_bet: 0.75, bluff_raise: 3.0 }
 };
 
 // --- F. 手牌分析库 ---
@@ -125,6 +118,7 @@ window.PokerData.HAND_ANALYSIS_DEFINITIONS = {
     monster: { label: "三条 (Trips/Set)", advice: "强力价值", reason: "隐蔽性强，造大底池！" },
     
     top_pair: { label: "顶对 (Top Pair)", advice: "价值/控池", reason: "通常领先，湿润面别打太深。" },
+    top_pair_with_draw: { label: "顶对+听牌", advice: "积极进攻", reason: "领先且有后备计划，应主动进攻。" },
     middle_pair: { label: "中对 (Middle Pair)", advice: "抓诈唬/过牌", reason: "打不过强牌，适合控池。" },
     bottom_pair: { label: "底对 (Bottom Pair)", advice: "过牌/弃牌", reason: "很难承受大额注码。" },
     pocket_pair_below: { label: "小口袋对 (Underpair)", advice: "过牌/弃牌", reason: "极易被压制，通常只能赢空气。" },
@@ -166,6 +160,7 @@ window.PokerData.HAND_ANALYSIS_DEFINITIONS = {
     monster: { label: "Set/Trips", advice: "Value", reason: "Very strong. Build a big pot!" },
 
     top_pair: { label: "Top Pair", advice: "Value/Control", reason: "Usually ahead. Don't overplay on wet boards." },
+    top_pair_with_draw: { label: "Top Pair + Draw", advice: "Attack", reason: "You are ahead with a backup plan. Be aggressive." },
     middle_pair: { label: "Middle Pair", advice: "Check/Bluff-Catch", reason: "Showdown value, but loses to aggression." },
     bottom_pair: { label: "Bottom Pair", advice: "Check/Fold", reason: "Weak showdown value." },
     pocket_pair_below: { label: "Underpair", advice: "Check/Fold", reason: "Easily dominated." },
@@ -186,18 +181,18 @@ window.PokerData.HAND_ANALYSIS_DEFINITIONS = {
 
 window.PokerData.TEXTURE_STRATEGIES = {
   zh: {
-    TEX_PAIRED: { name: "公对面 (Paired)", desc: "有人可能中三条或葫芦。" },
-    TEX_MONOTONE: { name: "单色面 (Monotone)", desc: "极度危险，易有同花。" },
-    TEX_TWO_TONE: { name: "听花面 (Two-Tone)", desc: "听牌很多，需保护手牌。" },
-    TEX_CONNECTED: { name: "连张面 (Connected)", desc: "顺子可能性大。" },
-    TEX_RAINBOW_DRY: { name: "干燥面 (Dry)", desc: "安全，适合诈唬。" }
+    TEX_PAIRED: { name: "公对面 (Paired)", desc: "警惕三条或葫芦，优先控池。" },
+    TEX_MONOTONE: { name: "单色面 (Monotone)", desc: "极度危险！对手极可能有同花，除非你有坚果牌，否则谨慎。" },
+    TEX_TWO_TONE: { name: "听花面 (Two-Tone)", desc: "听牌很多，价值下注需加大尺度以保护手牌。" },
+    TEX_CONNECTED: { name: "连张面 (Connected)", desc: "顺子可能性大，你的顶对可能不再是强牌。" },
+    TEX_RAINBOW_DRY: { name: "干燥面 (Dry)", desc: "牌面安全，成牌领先时应持续价值下注，也适合诈唬。" }
   },
   en: {
-    TEX_PAIRED: { name: "Paired Board", desc: "Trips or Full House possible." },
-    TEX_MONOTONE: { name: "Monotone", desc: "Danger! Flush likely made." },
-    TEX_TWO_TONE: { name: "Two-Tone", desc: "Heavy draws available. Protect hand." },
-    TEX_CONNECTED: { name: "Connected", desc: "Straight possibilities." },
-    TEX_RAINBOW_DRY: { name: "Dry/Rainbow", desc: "Safe. Good for bluffing." }
+    TEX_PAIRED: { name: "Paired Board", desc: "Be cautious of Trips/Full House. Pot control is key." },
+    TEX_MONOTONE: { name: "Monotone", desc: "Danger! A flush is very likely. Be careful without the nuts." },
+    TEX_TWO_TONE: { name: "Two-Tone", desc: "Many draws. Protect your made hands with larger bets." },
+    TEX_CONNECTED: { name: "Connected", desc: "Straights are possible. Your top pair might be weak." },
+    TEX_RAINBOW_DRY: { name: "Dry/Rainbow", desc: "Safe board. Continue betting for value and good for bluffing." }
   }
 };
 
