@@ -989,10 +989,18 @@ function TexasHoldemAdvisor() {
             <div className="flex justify-between items-center px-1"><span className="text-xs font-bold text-slate-400">{t.players}</span><button onClick={() => setPlayers([...players, {id: Date.now(), bet: 0, totalContributed: 0, active: true}])} className="text-[10px] bg-slate-800 border border-slate-600 px-2 py-0.5 rounded text-slate-300">+ {t.add_player}</button></div>
             {players.map((p, idx) => (
                <div key={p.id} className={`flex items-center gap-3 bg-slate-800 p-2 rounded-lg border ${p.active ? 'border-slate-700' : 'opacity-50 border-transparent'}`}>
-                  <div className="w-6 h-6 rounded-full bg-slate-600 flex items-center justify-center text-xs font-bold text-slate-400">{idx+1}</div>
-                  <div className="flex-1 grid grid-cols-2 gap-2">
+                  <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-400">{idx+1}</div>
+                  <div className="flex-1 grid grid-cols-3 gap-2">
                      <button onClick={() => { const n = [...players]; n[idx].active = !n[idx].active; setPlayers(n); }} className={`text-xs rounded py-1 ${p.active ? 'bg-emerald-900/30 text-emerald-400' : 'bg-slate-700 text-slate-500'}`}>{p.active ? t.active : t.folded}</button>
-                     <div className="flex items-center bg-slate-900 rounded px-2 border border-slate-700"><span className="text-xs text-slate-500">$</span><input type="number" value={p.bet===0?'':p.bet} placeholder="0" onChange={e => handleOpponentBetChange(p.id, e.target.value)} className="w-full bg-transparent text-white text-sm py-1 font-mono focus:outline-none" /></div>
+                     <div className="col-span-2 flex items-center bg-slate-900 rounded border border-slate-700">
+                        <span className="text-xs text-slate-500 pl-2">$</span>
+                        <input type="number" value={p.bet===0?'':p.bet} placeholder="0" onChange={e => handleOpponentBetChange(p.id, e.target.value)} className="w-full bg-transparent text-white text-sm py-1 font-mono focus:outline-none text-right pr-2" />
+                        {maxBet > p.bet && p.active && (
+                           <button onClick={() => handleOpponentBetChange(p.id, maxBet)} className="text-[10px] bg-blue-600 text-white px-2 h-full rounded-r-md hover:bg-blue-500">
+                              Call
+                           </button>
+                        )}
+                     </div>
                   </div>
                   <button onClick={() => setPlayers(players.filter(x => x.id !== p.id))} className="text-slate-600 hover:text-red-400 px-2">×</button>
                </div>
