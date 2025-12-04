@@ -720,16 +720,18 @@ function TexasHoldemAdvisor() {
       const potOdds = totalPot > 0 ? (callAmount / (totalPot + callAmount)) * 100 : 0;
       const fullTrendData = runMonteCarloSimulationTrend(); // 获取完整的趋势数据
       const analysisKey = analyzeHandFeatures(heroHand, communityCards);
-      const textureRes = analyzeBoardTexture(communityCards); 
+      const textureRes = analyzeBoardTexture(communityCards);
+
+      // 核心修复：先计算胜率，再获取建议
+      const currentActiveOpponentsCount = players.filter(p => p.active).length;
+      const equity = fullTrendData.find(d => d.opponents === currentActiveOpponentsCount)?.equity || 0; // 提取当前活跃对手数量下的胜率
+
       const profile = STRATEGY_PROFILES[strategy] || STRATEGY_PROFILES['conservative'];
       let { adviceKey, reasonKey } = getGtoAdvice(equity, potOdds, profile, heroPosition);
       let finalReason = buildEnrichedReason(t[reasonKey] || `Pot Odds: ${potOdds.toFixed(1)}%`, potOdds);
 
       const analysisData = HAND_ANALYSIS_DEFINITIONS[lang][analysisKey];
       const textureStrategy = TEXTURE_STRATEGIES[lang][textureRes.pattern];
-
-      const currentActiveOpponentsCount = players.filter(p => p.active).length;
-      const equity = fullTrendData.find(d => d.opponents === currentActiveOpponentsCount)?.equity || 0; // 提取当前活跃对手数量下的胜率
       const drawStats = PROBABILITIES.outs_lookup[analysisKey];
 
       let betSizes = null;
