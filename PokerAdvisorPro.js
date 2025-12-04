@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { RefreshCw, Trophy, Users, Brain, Info, ArrowRight, Flame, Zap, Settings, X, ShieldCheck, Flag, Lightbulb, Grid, MapPin, Calculator, HelpCircle, RotateCcw, CheckSquare, CheckCircle, MousePointerClick, ChevronDown } from 'lucide-react';
+import Chart from 'chart.js';
 
 // 安全获取数据层
 const PokerData = window.PokerData || { 
@@ -15,7 +16,11 @@ const PokerData = window.PokerData || {
   TEXTS: { zh: {}, en: {} }
 };
 const { CONSTANTS, HAND_ANALYSIS_DEFINITIONS, TEXTURE_STRATEGIES, POSITIONS, STRATEGY_PROFILES, BOARD_TEXTURES, PROBABILITIES, STRATEGY_CONFIG, TEXTS } = PokerData;
-const { SUITS, RANKS, RANK_VALUES, PREFLOP_CHARTS, MATCHUP_EQUITY } = CONSTANTS;
+const { SUITS, RANKS, RANK_VALUES, PREFLOP_CHARTS, MATCHUP_EQUITY } = CONSTANTS; // Assuming PREFLOP_CHARTS and MATCHUP_EQUITY are part of CONSTANTS
+
+// 注册 Chart.js 必要的组件
+import { CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
+Chart.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
 /**
  * 德州扑克助手 Pro (v7.0 - Strict Logic)
@@ -128,6 +133,86 @@ const CardSelector = ({ selectingFor, onClose, onCardSelect, unavailableCards, d
           ))}
         </div>
       </div>
+    </div>
+  );
+};
+
+const EquityTrendChart = ({ data, t }) => {
+  const chartRef = useRef(null);
+  const chartInstance = useRef(null);
+
+  useEffect(() => {
+    if (chartRef.current && data && data.length > 0) {
+      const ctx = chartRef.current.getContext('2d');
+
+      if (chartInstance.current) {
+        chartInstance.current.destroy(); // 销毁现有图表实例
+      }
+
+      chartInstance.current = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: data.map(d => `${d.opponents} ${t.opponents_short}`),
+          datasets: [{
+            label: t.equity_vs_opponents,
+            data: data.map(d => d.equity),
+            borderColor: 'rgb(75, 192, 192)',
+            tension: 0.1,
+            fill: false,
+            pointBackgroundColor: 'rgb(75, 192, 192)',
+            pointBorderColor: '#fff',
+            pointHoverBackgroundColor: '#fff',
+            pointHoverBorderColor: 'rgb(75, 192, 192)',
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: false,
+              labels: {
+                color: '#cbd5e1' // slate-300
+              }
+            },
+            title: {
+              display: true,
+              text: t.equity_trend_chart_title,
+              color: '#e2e8f0' // slate-200
+            }
+          },
+          scales: {
+            x: {
+              title: {
+                display: true,
+                text: t.num_opponents,
+                color: '#94a3b8' // slate-400
+              },
+              ticks: { color: '#94a3b8' },
+              grid: { color: 'rgba(255, 255, 255, 0.05)' }
+            },
+            y: {
+              title: {
+                display: true,
+                text: t.equity_percentage,
+                color: '#94a3b8'
+              },
+              min: 0, max: 100,
+              ticks: { color: '#94a3b8', callback: (value) => value + '%' },
+              grid: { color: 'rgba(255, 255, 255, 0.05)' }
+            }
+          }
+        }
+      });
+    }
+    return () => { if (chartInstance.current) chartInstance.current.destroy(); };
+  }, [data, t]);
+
+  if (!data || data.length === 0) return null;
+
+  return (
+    <div className="bg-slate-900 p-4 rounded-xl border border-slate-700 mt-4">
+      <canvas ref={chartRef} style={{ maxHeight: '200px' }}></canvas>
     </div>
   );
 };
@@ -454,8 +539,8 @@ function TexasHoldemAdvisor() {
   const [selectingFor, setSelectingFor] = useState(null); 
   const [settlementMode, setSettlementMode] = useState(false);
   const [potSegments, setPotSegments] = useState([]);
+  const [equityTrendData, setEquityTrendData] = useState(null); // 新增状态变量
 
-  const t = TEXTS[lang] || TEXTS['zh'];
   const currentOpponentBets = players.reduce((sum, p) => sum + p.bet, 0); 
   const totalPot = mainPot + currentOpponentBets + heroBet;
   const maxBet = Math.max(heroBet, ...players.map(p => p.bet));
@@ -469,55 +554,65 @@ function TexasHoldemAdvisor() {
   const isCallAllIn = isCallAction && (maxBet >= heroStack);
 
   // --- 重构后的核心逻辑 ---
-
-  // 1. 蒙特卡洛模拟函数
-  const runMonteCarloSimulation = () => {
+  // 1. 蒙特卡洛单次模拟辅助函数
+  const _runSingleMonteCarloSimulation = (numOpponents, simulationDeckBase, heroHand, communityCards) => {
     const SIMULATIONS = 1500;
     let wins = 0, ties = 0;
-    const activeOpponents = players.filter(p => p.active).length;
-
-    const knownCards = [...heroHand, ...communityCards].filter(Boolean);
-    const knownCardSet = new Set(knownCards.map(c => `${c.rank}${c.suit}`));
-    let simulationDeck = [];
-    for (let d = 0; d < deckCount; d++) {
-      for (const s of SUITS) {
-        for (const r of RANKS) {
-          if (!knownCardSet.has(`${r}${s}`)) {
-            simulationDeck.push({ rank: r, suit: s });
-          }
-        }
-      }
-    }
-
+  
     const boardRunout = communityCards.filter(Boolean);
     const cardsForBoard = 5 - boardRunout.length;
-    const cardsForOpponents = activeOpponents * 2;
-
+    const cardsForOpponents = numOpponents * 2;
+  
     for (let i = 0; i < SIMULATIONS; i++) {
-      for (let j = simulationDeck.length - 1; j > 0; j--) {
-        const k = Math.floor(Math.random() * (j + 1));
-        [simulationDeck[j], simulationDeck[k]] = [simulationDeck[k], simulationDeck[j]];
+      // IMPORTANT: Shuffle a *copy* of the base deck for each simulation
+      let currentSimDeck = [...simulationDeckBase];
+      for (let j = currentSimDeck.length - 1; j > 0; j--) {
+          const k = Math.floor(Math.random() * (j + 1));
+          [currentSimDeck[j], currentSimDeck[k]] = [currentSimDeck[k], currentSimDeck[j]];
       }
-
-      const drawnCards = simulationDeck.slice(0, cardsForBoard + cardsForOpponents);
+  
+      const drawnCards = currentSimDeck.slice(0, cardsForBoard + cardsForOpponents);
       const runout = drawnCards.slice(0, cardsForBoard);
       const finalBoard = [...boardRunout, ...runout];
       
       const heroScore = evaluateHand([...heroHand, ...finalBoard]);
       let heroWins = true, isTie = false;
-
-      for (let p = 0; p < activeOpponents; p++) {
+  
+      for (let p = 0; p < numOpponents; p++) {
         const oppHand = drawnCards.slice(cardsForBoard + p * 2, cardsForBoard + p * 2 + 2);
         const oppScore = evaluateHand([...oppHand, ...finalBoard]);
         if (oppScore > heroScore) { heroWins = false; break; }
         if (oppScore === heroScore) isTie = true;
       }
-
       if (heroWins && !isTie) wins++;
       if (heroWins && isTie) ties++;
     }
-
     return ((wins + (ties / 2)) / SIMULATIONS) * 100;
+  };
+
+  // 2. 蒙特卡洛模拟趋势生成函数
+  const runMonteCarloSimulationTrend = () => {
+    const knownCards = [...heroHand, ...communityCards].filter(Boolean);
+    const knownCardSet = new Set(knownCards.map(c => `${c.rank}${c.suit}`));
+    let simulationDeckBase = []; // This deck is prepared once and remains unchanged
+    for (let d = 0; d < deckCount; d++) {
+        for (const s of SUITS) {
+            for (const r of RANKS) {
+                if (!knownCardSet.has(`${r}${s}`)) {
+                    simulationDeckBase.push({ rank: r, suit: s });
+                }
+            }
+        }
+    }
+
+    const trendData = [];
+    // 模拟从 1 到总对手数量的趋势
+    const maxOpponentsAtTable = players.length; // 'players' 数组代表所有对手
+    for (let numOpponents = 1; numOpponents <= maxOpponentsAtTable; numOpponents++) {
+        const equity = _runSingleMonteCarloSimulation(numOpponents, simulationDeckBase, heroHand, communityCards);
+        trendData.push({ opponents: numOpponents, equity: equity });
+    }
+    return trendData;
   };
 
   // 2. GTO建议生成函数
@@ -555,6 +650,16 @@ function TexasHoldemAdvisor() {
       }
     }
     return { adviceKey, reasonKey };
+  };
+
+  // 假设 PokerData.js 中 TEXTS 对象已包含以下键
+  const t = {
+    ...TEXTS[lang],
+    equity_vs_opponents: { zh: '胜率 vs. 对手数量', en: 'Equity vs. Opponents' }[lang],
+    equity_trend_chart_title: { zh: '手牌胜率趋势', en: 'Hand Equity Trend' }[lang],
+    num_opponents: { zh: '对手数量', en: 'Number of Opponents' }[lang],
+    equity_percentage: { zh: '胜率 (%)', en: 'Equity (%)' }[lang],
+    opponents_short: { zh: '人', en: 'opp' }[lang], // 用于图表标签，如 "1 人", "2 opp"
   };
 
   // 3. 丰富建议理由的辅助函数
@@ -596,12 +701,14 @@ function TexasHoldemAdvisor() {
     setIsCalculating(true);
     setResult(null);
 
+    setEquityTrendData(null); // 清除之前的趋势数据
+
     // 使用setTimeout来确保UI更新（加载状态），然后执行计算
     await new Promise(resolve => setTimeout(resolve, 50));
 
     try {
-      const equity = runMonteCarloSimulation();
       const potOdds = totalPot > 0 ? (callAmount / (totalPot + callAmount)) * 100 : 0;
+      const fullTrendData = runMonteCarloSimulationTrend(); // 获取完整的趋势数据
       const analysisKey = analyzeHandFeatures(heroHand, communityCards);
       const textureRes = analyzeBoardTexture(communityCards); 
       const profile = STRATEGY_PROFILES[strategy] || STRATEGY_PROFILES['conservative'];
@@ -610,6 +717,9 @@ function TexasHoldemAdvisor() {
 
       const analysisData = HAND_ANALYSIS_DEFINITIONS[lang][analysisKey];
       const textureStrategy = TEXTURE_STRATEGIES[lang][textureRes.pattern];
+
+      const currentActiveOpponentsCount = players.filter(p => p.active).length;
+      const equity = fullTrendData.find(d => d.opponents === currentActiveOpponentsCount)?.equity || 0; // 提取当前活跃对手数量下的胜率
       const drawStats = PROBABILITIES.outs_lookup[analysisKey];
 
       let betSizes = null;
@@ -641,6 +751,7 @@ function TexasHoldemAdvisor() {
         betSizes,
         isBluff: adviceKey.includes('bluff')
       });
+      setEquityTrendData(fullTrendData); // 设置趋势数据用于图表
     } catch (error) {
       console.error("Error during equity calculation:", error);
     } finally {
@@ -871,6 +982,8 @@ function TexasHoldemAdvisor() {
                <p className="text-xs text-slate-400 whitespace-pre-wrap leading-relaxed font-mono">{result.reason}</p>
                
                {result.drawStats && (
+                 // 听牌数学
+                 // ... (保持不变)
                  <div className="bg-slate-800 p-2 rounded border border-slate-700 flex items-center gap-3">
                     <div className="bg-indigo-900/50 p-2 rounded text-indigo-300"><Calculator className="w-5 h-5"/></div>
                     <div>
@@ -879,6 +992,8 @@ function TexasHoldemAdvisor() {
                  </div>
                )}
 
+               {/* 胜率趋势图 */}
+               {equityTrendData && <EquityTrendChart data={equityTrendData} t={t} />}
                {result.drawStats && <DrawProbabilityChart outs={result.drawStats.outs} street={street} t={t} />}
                
                {result.betSizes && (
