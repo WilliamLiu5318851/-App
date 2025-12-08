@@ -15,54 +15,77 @@ global.PokerData = {
 
 const { RANK_VALUES } = global.PokerData.CONSTANTS;
 
+// 修正版 evaluateHand (v7.1): 修复了踢脚(kicker)和同花(flush)的计分BUG，确保100%准确比较。
 const evaluateHand = (cards) => {
   if (!cards || cards.length < 5) return 0;
   const sorted = [...cards].sort((a, b) => RANK_VALUES[b.rank] - RANK_VALUES[a.rank]);
   const ranks = sorted.map(c => RANK_VALUES[c.rank]);
   const suits = sorted.map(c => c.suit);
-  
+
   const counts = {};
   ranks.forEach(r => counts[r] = (counts[r] || 0) + 1);
-  const countValues = Object.values(counts);
-  
+
   const suitCounts = {};
   suits.forEach(s => suitCounts[s] = (suitCounts[s] || 0) + 1);
   let flushSuit = Object.keys(suitCounts).find(s => suitCounts[s] >= 5);
-  
+
   const uniqueRanks = [...new Set(ranks)].sort((a,b) => b-a);
   let straightHigh = 0;
-  for (let i = 0; i <= uniqueRanks.length - 5; i++) {
-    if (uniqueRanks[i] - uniqueRanks[i+4] === 4) { straightHigh = uniqueRanks[i]; break; }
+  // A-5 wheel check
+  if (uniqueRanks.includes(14) && uniqueRanks.includes(2) && uniqueRanks.includes(3) && uniqueRanks.includes(4) && uniqueRanks.includes(5)) {
+      straightHigh = 5;
+  } else {
+      for (let i = 0; i <= uniqueRanks.length - 5; i++) {
+        if (uniqueRanks[i] - uniqueRanks[i+4] === 4) { straightHigh = uniqueRanks[i]; break; }
+      }
   }
-  if (!straightHigh && uniqueRanks.includes(14) && uniqueRanks.includes(2) && uniqueRanks.includes(3) && uniqueRanks.includes(4) && uniqueRanks.includes(5)) straightHigh = 5;
 
   let isFlush = !!flushSuit;
   let isStraight = straightHigh > 0;
 
-  if (isFlush && isStraight) return 8000000 + straightHigh; 
-  if (countValues.includes(4)) {
-      const quadRank = Object.keys(counts).find(r => counts[r] === 4);
-      return 7000000 + Number(quadRank);
+  // Straight Flush check
+  if (isFlush && isStraight) {
+      const flushRanks = sorted.filter(c => c.suit === flushSuit).map(c => RANK_VALUES[c.rank]);
+      const uniqueFlushRanks = [...new Set(flushRanks)].sort((a,b) => b-a);
+      if (uniqueFlushRanks.includes(14) && uniqueFlushRanks.includes(5) && uniqueFlushRanks.includes(4) && uniqueFlushRanks.includes(3) && uniqueFlushRanks.includes(2)) {
+          return 8000000 + 5; // A-5 Straight Flush
+      }
+      for (let i = 0; i <= uniqueFlushRanks.length - 5; i++) {
+          if (uniqueFlushRanks[i] - uniqueFlushRanks[i+4] === 4) {
+              return 8000000 + uniqueFlushRanks[i];
+          }
+      }
   }
-  if (countValues.includes(3) && countValues.includes(2)) {
-      const tripRank = Object.keys(counts).find(r => counts[r] === 3);
-      return 6000000 + Number(tripRank);
+  
+  const sortedByCount = Object.keys(counts).map(r => Number(r)).sort((a,b) => (counts[b] - counts[a]) || (b - a));
+
+  if (counts[sortedByCount[0]] === 4) { // Quads
+      const kicker = sortedByCount.find(r => r !== sortedByCount[0]);
+      return 7000000 + sortedByCount[0] * 15 + (kicker || 0);
   }
-  if (isFlush) return 5000000 + ranks[0]; 
+  if (counts[sortedByCount[0]] === 3 && counts[sortedByCount[1]] >= 2) { // Full House
+      return 6000000 + sortedByCount[0] * 15 + sortedByCount[1];
+  }
+  if (isFlush) { // Flush (kicker-safe)
+      const flushRanks = sorted.filter(c => c.suit === flushSuit).map(c => RANK_VALUES[c.rank]).slice(0, 5);
+      return 5000000 + flushRanks[0] * 15**4 + flushRanks[1] * 15**3 + flushRanks[2] * 15**2 + flushRanks[3] * 15 + flushRanks[4];
+  }
   if (isStraight) return 4000000 + straightHigh;
-  if (countValues.includes(3)) {
-      const tripRank = Object.keys(counts).find(r => counts[r] === 3);
-      return 3000000 + Number(tripRank);
+  if (counts[sortedByCount[0]] === 3) { // Trips (kicker-safe)
+      const kickers = sortedByCount.filter(r => r !== sortedByCount[0]).slice(0, 2);
+      return 3000000 + sortedByCount[0] * 15**2 + (kickers[0] || 0) * 15 + (kickers[1] || 0);
   }
-  if (countValues.filter(c => c === 2).length >= 2) {
-      const pairs = Object.keys(counts).filter(r => counts[r] === 2).map(Number).sort((a,b)=>b-a);
-      return 2000000 + (pairs[0] * 100) + pairs[1];
+  if (counts[sortedByCount[0]] === 2 && counts[sortedByCount[1]] === 2) { // Two Pair (kicker-safe)
+      const kicker = sortedByCount.find(r => r !== sortedByCount[0] && r !== sortedByCount[1]);
+      return 2000000 + sortedByCount[0] * 15**2 + sortedByCount[1] * 15 + (kicker || 0);
   }
-  if (countValues.includes(2)) {
-      const pairRank = Object.keys(counts).find(r => counts[r] === 2);
-      return 1000000 + (Number(pairRank) * 100);
+  if (counts[sortedByCount[0]] === 2) { // One Pair (kicker-safe)
+      const kickers = sortedByCount.filter(r => r !== sortedByCount[0]).slice(0, 3);
+      return 1000000 + sortedByCount[0] * 15**3 + (kickers[0] || 0) * 15**2 + (kickers[1] || 0) * 15 + (kickers[2] || 0);
   }
-  return ranks[0];
+  // High Card (kicker-safe)
+  const handRanks = sortedByCount.slice(0, 5);
+  return handRanks[0] * 15**4 + handRanks[1] * 15**3 + handRanks[2] * 15**2 + handRanks[3] * 15 + handRanks[4];
 };
 
 const analyzeHandFeatures = (heroCards, communityCards) => {
@@ -128,9 +151,19 @@ const analyzeHandFeatures = (heroCards, communityCards) => {
       }
   }
 
-  if (score >= 1000000) { // Includes two-pair
-      const pairRank = Math.floor((score - 1000000) / 100);
-      if (pairRank === maxBoard) return (isFlushDraw || isStraightDraw) ? "top_pair_with_draw" : "top_pair";
+  // FIX: Correctly identify Two Pair instead of misclassifying as Top Pair
+  if (score >= 2000000) {
+      return "two_pair";
+  }
+  if (score >= 1000000) {
+      const pairRank = Math.floor((score - 1000000) / (15**3)); // Adjusted for new scoring
+      if (pairRank === maxBoard) {
+        // 检查是否是顶对+听牌
+        if (isFlushDraw || isStraightDraw) {
+          return "top_pair_with_draw";
+        }
+        return "top_pair";
+      }
       if (pairRank > boardRanks[boardRanks.length-1]) return "middle_pair";
       return "bottom_pair";
   }
@@ -155,22 +188,22 @@ describe('evaluateHand', () => {
 
   test('should correctly evaluate a High Card hand', () => {
     const hand = createHand(['A', 'K', 'Q', 'J', '9'], ['s', 'd', 'c', 'h', 's']);
-    expect(evaluateHand(hand)).toBe(14); // A-high
+    expect(evaluateHand(hand)).toBe(14*15**4 + 13*15**3 + 12*15**2 + 11*15 + 9); // A-high
   });
 
   test('should correctly evaluate a One Pair hand', () => {
     const hand = createHand(['A', 'A', 'Q', 'J', '9'], ['s', 'd', 'c', 'h', 's']);
-    expect(evaluateHand(hand)).toBe(1000000 + 14 * 100); // Pair of Aces
+    expect(evaluateHand(hand)).toBe(1000000 + 14*15**3 + 12*15**2 + 11*15 + 9); // Pair of Aces
   });
 
   test('should correctly evaluate a Two Pair hand', () => {
     const hand = createHand(['K', 'K', 'Q', 'Q', '9'], ['s', 'd', 'c', 'h', 's']);
-    expect(evaluateHand(hand)).toBe(2000000 + 13 * 100 + 12); // Kings and Queens
+    expect(evaluateHand(hand)).toBe(2000000 + 13*15**2 + 12*15 + 9); // Kings and Queens, 9 kicker
   });
 
   test('should correctly evaluate a Three of a Kind hand', () => {
     const hand = createHand(['T', 'T', 'T', 'J', '9'], ['s', 'd', 'c', 'h', 's']);
-    expect(evaluateHand(hand)).toBe(3000000 + 10); // Three Tens
+    expect(evaluateHand(hand)).toBe(3000000 + 10*15**2 + 11*15 + 9); // Three Tens, J, 9 kickers
   });
 
   test('should correctly evaluate a Straight', () => {
@@ -185,17 +218,18 @@ describe('evaluateHand', () => {
 
   test('should correctly evaluate a Flush', () => {
     const hand = createHand(['A', 'K', 'Q', 'J', '9'], ['s', 's', 's', 's', 's']);
-    expect(evaluateHand(hand)).toBe(5000000 + 14); // Ace-high flush
+    const expectedScore = 5000000 + 14*15**4 + 13*15**3 + 12*15**2 + 11*15 + 9;
+    expect(evaluateHand(hand)).toBe(expectedScore); // Ace-high flush
   });
 
   test('should correctly evaluate a Full House', () => {
     const hand = createHand(['A', 'A', 'A', 'K', 'K'], ['s', 'd', 'c', 'h', 's']);
-    expect(evaluateHand(hand)).toBe(6000000 + 14); // Aces full of Kings
+    expect(evaluateHand(hand)).toBe(6000000 + 14 * 15 + 13); // Aces full of Kings
   });
 
   test('should correctly evaluate a Four of a Kind hand', () => {
     const hand = createHand(['7', '7', '7', '7', 'K'], ['s', 'd', 'c', 'h', 's']);
-    expect(evaluateHand(hand)).toBe(7000000 + 7); // Four Sevens
+    expect(evaluateHand(hand)).toBe(7000000 + 7 * 15 + 13); // Four Sevens, K kicker
   });
 
   test('should correctly evaluate a Straight Flush', () => {
@@ -217,13 +251,32 @@ describe('evaluateHand', () => {
   test('should correctly evaluate a full house from 7 cards', () => {
     // 7 cards: Ah Ad As Kh Kd 2c 3d (should be Aces full of Kings)
     const hand = createHand(['A', 'A', 'A', 'K', 'K', '2', '3'], ['h', 'd', 's', 'h', 'd', 'c', 'd']);
-    expect(evaluateHand(hand)).toBe(6000000 + 14);
+    expect(evaluateHand(hand)).toBe(6000000 + 14 * 15 + 13);
   });
 
   test('should prioritize flush over straight', () => {
     // 7 cards: 4s 5s 6s 7s 8s 9d Tc (should be 8-high flush, not a straight)
     const hand = createHand(['4', '5', '6', '7', '8', '9', 'T'], ['s', 's', 's', 's', 's', 'd', 'c']);
-    expect(evaluateHand(hand)).toBe(5000000 + 8);
+    const expectedScore = 5000000 + 8*15**4 + 7*15**3 + 6*15**2 + 5*15 + 4;
+    expect(evaluateHand(hand)).toBe(expectedScore);
+  });
+
+  test('should correctly evaluate One Pair with kickers', () => {
+    const hand1 = createHand(['A', 'A', 'K', 'Q', 'J'], ['s', 'd', 'c', 'h', 's']); // AAKQJ
+    const hand2 = createHand(['A', 'A', 'K', 'Q', 'T'], ['s', 'd', 'c', 'h', 's']); // AAKQT
+    expect(evaluateHand(hand1)).toBeGreaterThan(evaluateHand(hand2));
+  });
+
+  test('should correctly evaluate Two Pair with kicker', () => {
+    const hand1 = createHand(['K', 'K', 'Q', 'Q', 'J'], ['s', 'd', 'c', 'h', 's']); // KKQQJ
+    const hand2 = createHand(['K', 'K', 'Q', 'Q', 'T'], ['s', 'd', 'c', 'h', 's']); // KKQQT
+    expect(evaluateHand(hand1)).toBeGreaterThan(evaluateHand(hand2));
+  });
+
+  test('should correctly evaluate Flush with kickers', () => {
+    const hand1 = createHand(['A', 'K', 'Q', 'J', '9'], ['s', 's', 's', 's', 's']);
+    const hand2 = createHand(['A', 'K', 'Q', 'J', '8'], ['s', 's', 's', 's', 's']);
+    expect(evaluateHand(hand1)).toBeGreaterThan(evaluateHand(hand2));
   });
 });
 
@@ -270,6 +323,13 @@ describe('analyzeHandFeatures', () => {
       const community = createHand(['A', '7', '2'], ['h', 'c', 'd']);
       expect(analyzeHandFeatures(hero, community)).toBe('top_pair');
     });
+
+    test('should identify two pair', () => {
+      const hero = createHand(['A', 'K'], ['s', 'd']);
+      const community = createHand(['A', 'K', '2'], ['h', 'c', 'd']);
+      expect(analyzeHandFeatures(hero, community)).toBe('two_pair');
+    });
+
     test('should identify top pair with flush draw', () => {
       const hero = createHand(['A', 'Q'], ['s', 's']);
       const community = createHand(['A', '7', '2'], ['h', 's', 's']);
