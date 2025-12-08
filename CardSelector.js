@@ -2,7 +2,7 @@ import React from 'react';
 import { X } from 'lucide-react';
 import CardIcon from './CardIcon.js';
 
-const SUITS = ['s', 'h', 'd', 'c'];
+const SUITS = ['s', 'h', 'c', 'd']; // 顺序调整为：黑桃, 红桃, 梅花, 方块
 const RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A'];
 
 const CardSelector = ({ selectingFor, onClose, onCardSelect, unavailableCards, deckCount, t }) => {

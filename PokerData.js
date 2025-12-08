@@ -10,7 +10,7 @@ window.PokerData = {};
 
 // --- A. 基础常量 ---
 window.PokerData.CONSTANTS = {
-  SUITS: ['s', 'h', 'd', 'c'],
+  SUITS: ['s', 'h', 'c', 'd'], // 顺序调整为：黑桃, 红桃, 梅花, 方块
   RANKS: ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A'],
   RANK_VALUES: { '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, 'T': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14 },
   STREETS: ['Pre-flop', 'Flop', 'Turn', 'River']
